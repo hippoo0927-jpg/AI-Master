@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // 기본 관리자 키 설정
 const DEFAULT_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
@@ -58,21 +58,21 @@ export const SYSTEM_INSTRUCTION = `
  */
 export async function testApiKey(apiKey: string) {
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    // 404 에러 방지를 위해 가장 안정적인 모델명 사용
+    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    // 404 에러 방지를 위해 SDK 표준 모델명 사용
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-flash-latest",
       contents: "ping",
       config: { maxOutputTokens: 10 }
     });
     return response.text !== undefined;
   } catch (error: any) {
     console.error("API Key Test Error:", error);
-    // 404 에러인 경우 구체적인 가이드 제공을 위해 에러 객체에 정보 추가 가능
+    // 404 에러인 경우 구체적인 가이드 제공
     if (error.message?.includes("404") || error.status === 404) {
       throw new Error("API 서버와의 호환성 문제입니다. 모델 설정을 변경하거나 나중에 다시 시도해주세요.");
     }
-    return false;
+    throw error;
   }
 }
 
@@ -85,7 +85,7 @@ export async function generateConsulting(
   customApiKey?: string, // 유저가 등록한 개인 키
   selectedModel?: string // 유저가 선택한 모델
 ) {
-  const model = selectedModel || "gemini-1.5-flash";
+  const model = selectedModel || "gemini-flash-latest";
   const ai = getAIInstance(customApiKey);
   
   try {
@@ -185,7 +185,7 @@ export async function* generateConsultingStream(
   customApiKey?: string,
   selectedModel?: string
 ) {
-  const model = selectedModel || "gemini-1.5-flash";
+  const model = selectedModel || "gemini-flash-latest";
   const ai = getAIInstance(customApiKey);
   
   try {

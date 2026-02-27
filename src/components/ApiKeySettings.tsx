@@ -29,7 +29,7 @@ interface ApiKeySettingsProps {
 export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps) {
   const [apiKey, setApiKey] = useState('');
   const [savedKey, setSavedKey] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash');
+  const [selectedModel, setSelectedModel] = useState('gemini-flash-latest');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
   const [testErrorMessage, setTestErrorMessage] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
         const key = data.customApiKey || '';
         setApiKey(key);
         setSavedKey(key || null);
-        setSelectedModel(data.selectedModel || 'gemini-1.5-flash');
+        setSelectedModel(data.selectedModel || 'gemini-flash-latest');
         if (key) setIsVerified(true);
       }
     };
@@ -234,8 +234,8 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
                   <p className="text-xs font-bold text-slate-500 mb-3">사용할 모델 선택</p>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', desc: '빠른 속도 & 효율성' },
-                      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', desc: '복잡한 추론 & 대용량' }
+                      { id: 'gemini-flash-latest', name: 'Gemini 1.5 Flash', desc: '빠른 속도 & 효율성' },
+                      { id: 'gemini-3.1-pro-preview', name: 'Gemini 1.5 Pro', desc: '복잡한 추론 & 대용량' }
                     ].map((m) => (
                       <button
                         key={m.id}
