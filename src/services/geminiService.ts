@@ -59,12 +59,13 @@ export const SYSTEM_INSTRUCTION = `
 export async function testApiKey(apiKey: string) {
   try {
     const ai = new GoogleGenAI({ apiKey });
+    // 404 에러 방지를 위해 -latest 접미사 사용 또는 최신 모델명 적용
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: "Hello, this is a test connection. Please reply with 'OK'.",
+      model: "gemini-1.5-flash-latest",
+      contents: "Hi",
       config: { maxOutputTokens: 10 }
     });
-    return response.text?.includes("OK") || response.text !== undefined;
+    return response.text !== undefined;
   } catch (error: any) {
     console.error("API Key Test Error:", error);
     return false;
@@ -80,7 +81,7 @@ export async function generateConsulting(
   customApiKey?: string, // 유저가 등록한 개인 키
   selectedModel?: string // 유저가 선택한 모델
 ) {
-  const model = selectedModel || "gemini-1.5-flash";
+  const model = selectedModel || "gemini-1.5-flash-latest";
   const ai = getAIInstance(customApiKey);
   
   try {
@@ -180,7 +181,7 @@ export async function* generateConsultingStream(
   customApiKey?: string,
   selectedModel?: string
 ) {
-  const model = selectedModel || "gemini-1.5-flash";
+  const model = selectedModel || "gemini-1.5-flash-latest";
   const ai = getAIInstance(customApiKey);
   
   try {
