@@ -88,6 +88,7 @@ export const SYSTEM_INSTRUCTION = `
 [출력 형식 가이드라인]
 반드시 다음 구조를 포함하는 JSON 형태로 응답하세요. 다른 설명이나 텍스트는 절대 포함하지 마십시오.
 DO NOT include any markdown formatting like \`\`\`json or \`\`\` in your response. Output ONLY the raw JSON string starting with { and ending with }.
+Keep your insights concise and direct to ensure the JSON structure is never cut off. Limit your total response length to under 1500 tokens.
 {
   "isClarificationNeeded": boolean,
   "clarificationMessage": "정보 부족 또는 파일 업로드 안내 (필요 없으면 null)",
@@ -174,32 +175,67 @@ export async function generateConsulting(
         temperature: 0.7,
         topP: 0.95,
         topK: 40,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
       }
     });
     
     const rawText = result.response.text() || "{}";
     
+    // JSON 복구 및 파싱 헬퍼 함수
+    const tryParseJson = (text: string) => {
+      try {
+        // 1. 기본적인 백틱 및 json 식별자 제거 전처리
+        const cleanedText = text.replace(/```json|```/g, "").trim();
+        return JSON.parse(cleanedText);
+      } catch (e) {
+        // 2. Auto-repair: 끊긴 문자열이나 괄호 복구 시도
+        let repaired = text.trim();
+        
+        // 마지막이 } 로 끝나지 않으면 복구 시도
+        if (!repaired.endsWith('}')) {
+          console.warn("[Gemini JSON Repair] Truncated JSON detected, attempting repair...");
+          
+          // 따옴표가 홀수개면 닫아줌 (문자열 도중 끊김 방지)
+          const quoteCount = (repaired.match(/"/g) || []).length;
+          if (quoteCount % 2 !== 0) repaired += '"';
+          
+          // 열린 중괄호/대괄호 개수만큼 닫아줌
+          const openBraces = (repaired.match(/\{/g) || []).length;
+          const closeBraces = (repaired.match(/\}/g) || []).length;
+          const openBrackets = (repaired.match(/\[/g) || []).length;
+          const closeBrackets = (repaired.match(/\]/g) || []).length;
+          
+          for (let i = 0; i < (openBrackets - closeBrackets); i++) repaired += ']';
+          for (let i = 0; i < (openBraces - closeBraces); i++) repaired += '}';
+          
+          try {
+            return JSON.parse(repaired);
+          } catch (innerError) {
+            throw e; // 원본 에러 던짐
+          }
+        }
+        throw e;
+      }
+    };
+
     try {
-      // 1. 기본적인 백틱 및 json 식별자 제거 전처리
-      const cleanedText = rawText.replace(/```json|```/g, "").trim();
-      return JSON.parse(cleanedText);
+      return tryParseJson(rawText);
     } catch (parseError) {
       console.warn("[Gemini JSON Parse] 1차 파싱 실패, Fail-safe 추출 시도...");
       
       try {
-        // 2. Fail-safe: 가장 처음 나오는 '{'와 마지막으로 나오는 '}' 사이의 구간만 추출
+        // 3. Fail-safe: 가장 처음 나오는 '{'와 마지막으로 나오는 '}' 사이의 구간만 추출
         const firstBrace = rawText.indexOf('{');
         const lastBrace = rawText.lastIndexOf('}');
         
         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
           const extractedJson = rawText.substring(firstBrace, lastBrace + 1);
-          return JSON.parse(extractedJson);
+          return tryParseJson(extractedJson);
         }
         throw new Error("JSON 구조를 찾을 수 없습니다.");
       } catch (finalError) {
         console.error("[Gemini JSON Parse] 최종 파싱 실패. 원본 데이터:", rawText);
-        throw new Error("AI 응답 데이터 형식이 올바르지 않습니다.");
+        throw new Error("AI 응답 데이터 형식이 올바르지 않거나 분석 내용이 너무 길어 잘렸습니다.");
       }
     }
   } catch (error: any) {
@@ -263,7 +299,7 @@ export async function* generateConsultingStream(
       contents: [{ role: "user", parts }],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
       }
     });
 
