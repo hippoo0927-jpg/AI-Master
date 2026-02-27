@@ -86,7 +86,8 @@ export const SYSTEM_INSTRUCTION = `
 - 등급에 맞지 않는 파일 업로드 시 정중하게 업그레이드를 권유하십시오.
 
 [출력 형식 가이드라인]
-반드시 다음 구조를 포함하는 JSON 형태로 응답하세요. 다른 설명이나 텍스트는 절대 포함하지 마십시오:
+반드시 다음 구조를 포함하는 JSON 형태로 응답하세요. 다른 설명이나 텍스트는 절대 포함하지 마십시오.
+DO NOT include any markdown formatting like \`\`\`json or \`\`\` in your response. Output ONLY the raw JSON string starting with { and ending with }.
 {
   "isClarificationNeeded": boolean,
   "clarificationMessage": "정보 부족 또는 파일 업로드 안내 (필요 없으면 null)",
@@ -177,12 +178,30 @@ export async function generateConsulting(
       }
     });
     
-    const text = result.response.text() || "{}";
-    // JSON만 추출하기 위한 정규식 (마크다운 코드 블록 등 제거)
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? jsonMatch[0] : text;
+    const rawText = result.response.text() || "{}";
     
-    return JSON.parse(jsonStr);
+    try {
+      // 1. 기본적인 백틱 및 json 식별자 제거 전처리
+      const cleanedText = rawText.replace(/```json|```/g, "").trim();
+      return JSON.parse(cleanedText);
+    } catch (parseError) {
+      console.warn("[Gemini JSON Parse] 1차 파싱 실패, Fail-safe 추출 시도...");
+      
+      try {
+        // 2. Fail-safe: 가장 처음 나오는 '{'와 마지막으로 나오는 '}' 사이의 구간만 추출
+        const firstBrace = rawText.indexOf('{');
+        const lastBrace = rawText.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          const extractedJson = rawText.substring(firstBrace, lastBrace + 1);
+          return JSON.parse(extractedJson);
+        }
+        throw new Error("JSON 구조를 찾을 수 없습니다.");
+      } catch (finalError) {
+        console.error("[Gemini JSON Parse] 최종 파싱 실패. 원본 데이터:", rawText);
+        throw new Error("AI 응답 데이터 형식이 올바르지 않습니다.");
+      }
+    }
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     
@@ -275,5 +294,4 @@ export async function* generateConsultingStream(
 function base64ToBlobData(base64: string) {
   return base64.replace(/^data:.*?;base64,/, "");
 }
-
 
