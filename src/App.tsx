@@ -33,6 +33,7 @@ import { generateConsulting } from './services/geminiService';
 import SubscriptionModal from './components/SubscriptionModal';
 import AdminDashboard from './components/AdminDashboard';
 import UserSubscriptionStatus from './components/UserSubscriptionStatus';
+import LoginModal from './components/LoginModal';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { initializeApp } from 'firebase/app';
@@ -100,6 +101,7 @@ export default function App() {
   const [userGrade, setUserGrade] = useState<string>('free'); // 기본 등급: free
   const [userExpiryDate, setUserExpiryDate] = useState<any>(null);
   const [showSubModal, setShowSubModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // 인증 상태 감시 및 Firestore 등급 동기화
   useEffect(() => {
@@ -133,16 +135,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 구글 로그인 로직
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Login Error:", error);
-      alert("로그인에 실패했습니다.");
-    }
-  };
-
   // 로그아웃 로직
   const handleLogout = async () => {
     await signOut(auth);
@@ -152,8 +144,7 @@ export default function App() {
   // --- AuthCheck: 비로그인 차단 로직 ---
   const ensureAuth = async () => {
     if (!user) {
-      alert("로그인 후 이용 가능합니다.");
-      handleLogin();
+      setShowLoginModal(true);
       return false;
     }
     return true;
@@ -224,6 +215,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen font-sans selection:bg-indigo-100">
+      {/* Login Modal */}
+      <LoginModal 
+        isOpen={showLoginModal} 
+        onClose={() => setShowLoginModal(false)} 
+      />
+
       {/* Subscription Modal */}
       <SubscriptionModal 
         isOpen={showSubModal} 
@@ -264,7 +261,7 @@ export default function App() {
                 </div>
               ) : (
                 <button 
-                  onClick={handleLogin}
+                  onClick={() => setShowLoginModal(true)}
                   className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
                 >
                   <LogIn className="w-4 h-4 text-indigo-600" />
