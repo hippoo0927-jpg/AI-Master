@@ -2,18 +2,28 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 관리자 확인 함수
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'hippoo0927@gmail.com';
+    }
+
     // 유저 문서 규칙
     match /users/{userId} {
-      // 본인 문서만 읽기 가능
+      // 관리자는 모든 권한 가짐
+      allow read, write: if isAdmin();
+
+      // 일반 유저: 본인 문서만 읽기 가능
       allow read: if request.auth != null && request.auth.uid == userId;
       
       // 생성 시: 본인 UID와 일치해야 하며, 등급은 반드시 'free'로 시작해야 함
       allow create: if request.auth != null && request.auth.uid == userId 
-                    && request.resource.data.grade == 'free';
+                    && request.resource.data.grade == 'free'
+                    && (!('expiryDate' in request.resource.data) || request.resource.data.expiryDate == null);
       
-      // 수정 시: 등급(grade) 필드는 절대 수정 불가 (관리자만 가능)
+      // 수정 시: 등급(grade) 및 만료일(expiryDate) 필드는 절대 수정 불가 (관리자만 가능)
       allow update: if request.auth != null && request.auth.uid == userId
-                    && request.resource.data.grade == resource.data.grade;
+                    && request.resource.data.grade == resource.data.grade
+                    && request.resource.data.expiryDate == resource.data.expiryDate;
       
       // 삭제 불가
       allow delete: if false;

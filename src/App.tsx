@@ -31,6 +31,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { generateConsulting } from './services/geminiService';
 import SubscriptionModal from './components/SubscriptionModal';
+import AdminDashboard from './components/AdminDashboard';
+import UserSubscriptionStatus from './components/UserSubscriptionStatus';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { initializeApp } from 'firebase/app';
@@ -96,6 +98,7 @@ export default function App() {
   // --- Firebase 상태 관리 ---
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userGrade, setUserGrade] = useState<string>('free'); // 기본 등급: free
+  const [userExpiryDate, setUserExpiryDate] = useState<any>(null);
   const [showSubModal, setShowSubModal] = useState(false);
 
   // 인증 상태 감시 및 Firestore 등급 동기화
@@ -103,23 +106,28 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Firestore에서 유저 등급 조회
+        // Firestore에서 유저 등급 및 만료일 조회
         const userDocRef = doc(db, 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         
         if (userDoc.exists()) {
-          setUserGrade(userDoc.data().grade || 'free');
+          const data = userDoc.data();
+          setUserGrade(data.grade || 'free');
+          setUserExpiryDate(data.expiryDate || null);
         } else {
           // 신규 유저인 경우 기본 등급으로 생성
           await setDoc(userDocRef, {
             email: currentUser.email,
             grade: 'free',
+            expiryDate: null,
             createdAt: new Date()
           });
           setUserGrade('free');
+          setUserExpiryDate(null);
         }
       } else {
         setUserGrade('free');
+        setUserExpiryDate(null);
       }
     });
     return () => unsubscribe();
@@ -269,6 +277,13 @@ export default function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Admin Dashboard - Only for hippoo0927@gmail.com */}
+        {user?.email === 'hippoo0927@gmail.com' && (
+          <div className="mb-16">
+            <AdminDashboard />
+          </div>
+        )}
+
         {/* Hero Section */}
         <div className="text-center mb-12">
           <motion.div
@@ -285,6 +300,17 @@ export default function App() {
               모든 데이터는 Firestore를 통해 안전하게 관리됩니다.
             </p>
           </motion.div>
+
+          {/* User Subscription Status */}
+          {user && (
+            <div className="max-w-md mx-auto mb-12">
+              <UserSubscriptionStatus 
+                grade={userGrade} 
+                expiryDate={userExpiryDate} 
+                onUpgradeClick={() => setShowSubModal(true)} 
+              />
+            </div>
+          )}
 
           {/* Category Grid */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">

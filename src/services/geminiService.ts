@@ -57,7 +57,8 @@ export async function generateConsulting(
   grade: string, // Firebase에서 가져온 유저 등급 (free, basic, premium)
   fileData?: { mimeType: string; data: string }
 ) {
-  const model = "gemini-3.1-pro-preview";
+  // 할당량 초과 문제를 해결하기 위해 더 가볍고 한도가 넉넉한 최신 Flash 모델 사용
+  const model = "gemini-3-flash-preview";
   
   try {
     const parts: any[] = [
@@ -68,7 +69,7 @@ export async function generateConsulting(
       parts.push({
         inlineData: {
           mimeType: fileData.mimeType,
-          data: fileData.data
+          data: base64ToBlobData(fileData.data) // Helper to ensure clean data if needed, but inlineData.data expects base64
         }
       });
     }
@@ -79,6 +80,14 @@ export async function generateConsulting(
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
+        // 답변의 질을 높이기 위한 세부 설정 (generationConfig)
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 2048,
+        // 불필요한 차단을 방지하기 위한 안전 설정 (safetySettings)
+        // @google/genai에서는 HarmCategory와 HarmBlockThreshold를 사용합니다.
+        // 여기서는 기본 설정을 유지하거나 필요에 따라 완화할 수 있습니다.
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -118,8 +127,20 @@ export async function generateConsulting(
     });
 
     return JSON.parse(response.text || "{}");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw error;
+    
+    // 할당량 초과(429) 에러 핸들링
+    if (error.message?.includes("429") || error.status === 429) {
+      throw new Error("현재 요청이 많습니다. 잠시 후 다시 시도해주세요.");
+    }
+    
+    // 기타 에러
+    throw new Error("AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
   }
+}
+
+// Base64 데이터 정제 헬퍼 (필요 시)
+function base64ToBlobData(base64: string) {
+  return base64.replace(/^data:.*?;base64,/, "");
 }
