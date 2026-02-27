@@ -1,11 +1,17 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // 기본 관리자 키 설정
 const DEFAULT_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
 
 // 인스턴스 생성을 위한 헬퍼 함수
 const getAIInstance = (customApiKey?: string) => {
-  return new GoogleGenAI({ apiKey: customApiKey || DEFAULT_API_KEY });
+  const apiKey = (customApiKey || DEFAULT_API_KEY).trim();
+  return new GoogleGenerativeAI(apiKey);
+};
+
+// 모델을 가져오는 헬퍼 함수 (v1 엔드포인트 강제)
+const getModel = (genAI: GoogleGenerativeAI, modelName: string) => {
+  return genAI.getGenerativeModel({ model: modelName }, { apiVersion: "v1" });
 };
 
 export const SYSTEM_INSTRUCTION = `
@@ -58,19 +64,16 @@ export const SYSTEM_INSTRUCTION = `
  */
 export async function testApiKey(apiKey: string) {
   try {
-    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-    // 404 에러 방지를 위해 SDK 표준 모델명 사용
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: "ping",
-      config: { maxOutputTokens: 10 }
-    });
-    return response.text !== undefined;
+    const sanitizedKey = apiKey.trim();
+    const genAI = new GoogleGenerativeAI(sanitizedKey);
+    // v1 엔드포인트와 표준 모델명 사용
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: "v1" });
+    const response = await model.generateContent("ping");
+    return response.response.text() !== undefined;
   } catch (error: any) {
     console.error("API Key Test Error:", error);
-    // 404 에러인 경우 구체적인 가이드 제공
     if (error.message?.includes("404") || error.status === 404) {
-      throw new Error("API 서버와의 호환성 문제입니다. 모델 설정을 변경하거나 나중에 다시 시도해주세요.");
+      throw new Error("API 서버와의 호환성 문제입니다. 모델 설정을 변경하거나 v1 엔드포인트 권한을 확인해 주세요.");
     }
     throw error;
   }
@@ -85,13 +88,21 @@ export async function generateConsulting(
   customApiKey?: string, // 유저가 등록한 개인 키
   selectedModel?: string // 유저가 선택한 모델
 ) {
-  const model = selectedModel || "gemini-flash-latest";
-  const ai = getAIInstance(customApiKey);
+  const modelName = selectedModel || "gemini-1.5-flash";
+  const genAI = getAIInstance(customApiKey);
+  const model = getModel(genAI, modelName);
   
   try {
-    const parts: any[] = [
-      { text: `유저 등급(Firebase Grade): ${grade}\n카테고리: ${category}\n선호 플랫폼: ${preferredPlatform}\n사용자 요청: ${userRequest}` }
-    ];
+    const prompt = `
+      유저 등급(Firebase Grade): ${grade}
+      카테고리: ${category}
+      선호 플랫폼: ${preferredPlatform}
+      사용자 요청: ${userRequest}
+      
+      시스템 지침: ${SYSTEM_INSTRUCTION}
+    `;
+
+    const parts: any[] = [{ text: prompt }];
 
     if (fileData) {
       parts.push({
@@ -102,55 +113,19 @@ export async function generateConsulting(
       });
     }
 
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts }],
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts }],
+      generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.7,
         topP: 0.95,
         topK: 40,
         maxOutputTokens: 2048,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            isClarificationNeeded: { type: Type.BOOLEAN },
-            clarificationMessage: { type: Type.STRING, nullable: true },
-            fileAnalysis: {
-              type: Type.OBJECT,
-              properties: {
-                insights: { type: Type.STRING },
-                strategicImprovements: { type: Type.STRING }
-              },
-              nullable: true
-            },
-            diagnosis: {
-              type: Type.OBJECT,
-              properties: {
-                selectedPlatform: { type: Type.STRING },
-                pipelineStrategy: { type: Type.STRING }
-              },
-              required: ["selectedPlatform", "pipelineStrategy"]
-            },
-            masterPrompt: { type: Type.STRING, nullable: true },
-            roi: { 
-              type: Type.OBJECT,
-              properties: {
-                savedHours: { type: Type.STRING },
-                economicValue: { type: Type.STRING },
-                architectComment: { type: Type.STRING }
-              },
-              required: ["savedHours", "economicValue", "architectComment"],
-              nullable: true
-            }
-          },
-          required: ["isClarificationNeeded", "diagnosis"]
-        }
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    const responseText = result.response.text();
+    return JSON.parse(responseText || "{}");
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     
@@ -160,7 +135,7 @@ export async function generateConsulting(
     }
 
     // Pro 모델 권한 에러 (403)
-    if (model.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
+    if (modelName.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
       throw new Error("현재 API 키가 Pro 모델을 지원하지 않습니다. Flash로 변경하거나 권한을 확인해 주세요.");
     }
 
@@ -185,13 +160,21 @@ export async function* generateConsultingStream(
   customApiKey?: string,
   selectedModel?: string
 ) {
-  const model = selectedModel || "gemini-flash-latest";
-  const ai = getAIInstance(customApiKey);
+  const modelName = selectedModel || "gemini-1.5-flash";
+  const genAI = getAIInstance(customApiKey);
+  const model = getModel(genAI, modelName);
   
   try {
-    const parts: any[] = [
-      { text: `유저 등급(Firebase Grade): ${grade}\n카테고리: ${category}\n선호 플랫폼: ${preferredPlatform}\n사용자 요청: ${userRequest}` }
-    ];
+    const prompt = `
+      유저 등급(Firebase Grade): ${grade}
+      카테고리: ${category}
+      선호 플랫폼: ${preferredPlatform}
+      사용자 요청: ${userRequest}
+      
+      시스템 지침: ${SYSTEM_INSTRUCTION}
+    `;
+
+    const parts: any[] = [{ text: prompt }];
 
     if (fileData) {
       parts.push({
@@ -202,27 +185,24 @@ export async function* generateConsultingStream(
       });
     }
 
-    const result = await ai.models.generateContentStream({
-      model,
-      contents: [{ parts }],
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        // 스트리밍 시에는 JSON 스키마를 사용하면 청크가 깨진 JSON이 될 수 있으므로 
-        // 텍스트로 받아서 나중에 파싱하거나, 혹은 JSON 모드에서 청크를 그대로 내보냅니다.
+    const result = await model.generateContentStream({
+      contents: [{ role: "user", parts }],
+      generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.7,
         maxOutputTokens: 2048,
       }
     });
 
-    for await (const chunk of result) {
-      if (chunk.text) {
-        yield chunk.text;
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      if (chunkText) {
+        yield chunkText;
       }
     }
   } catch (error: any) {
     console.error("Gemini Stream Error:", error);
-    if (model.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
+    if (modelName.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
       throw new Error("현재 API 키가 Pro 모델을 지원하지 않습니다. Flash로 변경하거나 권한을 확인해 주세요.");
     }
     throw error;
