@@ -291,6 +291,24 @@ export async function* generateExpertChatStream(
 }
 
 /**
+ * 첫 번째 메시지로부터 짧은 제목 생성
+ */
+export async function generateChatTitle(message: string, customApiKey?: string) {
+  const genAI = getAIInstance(customApiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  
+  const prompt = `다음 메시지의 핵심 내용을 10자 이내의 아주 짧은 제목으로 요약해줘. 따옴표나 마침표 없이 제목만 출력해: "${message}"`;
+  
+  try {
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim().substring(0, 10);
+  } catch (error) {
+    console.error("Title generation error:", error);
+    return message.substring(0, 10);
+  }
+}
+
+/**
  * 스트리밍 상담 생성
  */
 export async function* generateConsultingStream(
