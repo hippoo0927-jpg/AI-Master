@@ -12,7 +12,6 @@ import {
   XCircle
 } from 'lucide-react';
 import { 
-  getFirestore, 
   collection, 
   query, 
   onSnapshot, 
@@ -21,6 +20,7 @@ import {
   Timestamp,
   where
 } from 'firebase/firestore';
+import { db } from '../firebase';
 import dayjs from 'dayjs';
 
 interface UserData {
@@ -35,7 +35,6 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [filterPremium, setFilterPremium] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const db = getFirestore();
 
   useEffect(() => {
     const usersRef = collection(db, 'users');

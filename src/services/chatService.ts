@@ -1,5 +1,4 @@
 import { 
-  getFirestore, 
   collection, 
   addDoc, 
   query, 
@@ -12,6 +11,7 @@ import {
   updateDoc,
   setDoc
 } from 'firebase/firestore';
+import { db } from '../firebase';
 import dayjs from 'dayjs';
 
 export interface ChatHistoryItem {
@@ -21,8 +21,6 @@ export interface ChatHistoryItem {
   result: any;
   timestamp: any;
 }
-
-const db = getFirestore();
 
 /**
  * 대화 내용 저장

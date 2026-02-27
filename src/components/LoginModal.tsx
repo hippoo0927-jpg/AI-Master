@@ -10,17 +10,15 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { 
-  getAuth, 
   signInWithPopup, 
-  GoogleAuthProvider 
 } from 'firebase/auth';
 import { 
-  getFirestore, 
   doc, 
   getDoc,
   setDoc, 
   serverTimestamp 
 } from 'firebase/firestore';
+import { auth, db, googleProvider } from '../firebase';
 import { TERMS_OF_SERVICE, PRIVACY_POLICY } from '../constants/TermsData';
 
 interface LoginModalProps {
@@ -34,10 +32,6 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
   const [viewingTerms, setViewingTerms] = useState<'terms' | 'privacy' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const auth = getAuth();
-  const db = getFirestore();
-  const googleProvider = new GoogleAuthProvider();
 
   // 전체 동기화 로직
   useEffect(() => {

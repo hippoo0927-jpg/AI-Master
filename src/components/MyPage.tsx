@@ -12,7 +12,8 @@ import {
   Save,
   AlertCircle
 } from 'lucide-react';
-import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { testApiKey } from '../services/geminiService';
 
 interface MyPageProps {
@@ -26,7 +27,6 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const db = getFirestore();
 
   useEffect(() => {
     const fetchUserKey = async () => {
