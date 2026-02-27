@@ -38,11 +38,13 @@ import MyPage from './components/MyPage';
 import UsageWidget from './components/UsageWidget';
 import ChatHistorySidebar from './components/ChatHistorySidebar';
 import SidebarButton from './components/SidebarButton';
+import LandingPageHeader from './components/LandingPageHeader';
 import QuickPrompts from './components/QuickPrompts';
 import { 
   saveChatHistory, 
   subscribeToChatHistory, 
-  checkAndUpdateUsage, 
+  checkUsage,
+  incrementUsage,
   ChatHistoryItem 
 } from './services/chatService';
 
@@ -200,8 +202,18 @@ export default function App() {
     if (!(await ensureAuth())) return;
     if (!userInput.trim() && !file) return;
 
-    // 사용량 체크
-    const canProceed = await checkAndUpdateUsage(user!.uid, userGrade);
+    // 1. 입력값 유효성 검사 (10자 미만인 경우 AI 호출 전 차단)
+    if (userInput.trim().length < 10 && !file) {
+      setResult({
+        isClarificationNeeded: true,
+        clarificationMessage: "입력하신 내용이 너무 짧습니다. 설계하고 싶은 비즈니스 모델이나 해결하고 싶은 문제를 조금 더 구체적으로(10자 이상) 설명해주세요.",
+        isLocalValidation: true
+      });
+      return;
+    }
+
+    // 2. 사용량 체크 (차감은 성공적인 설계 응답 시에만 수행)
+    const canProceed = await checkUsage(user!.uid, userGrade);
     if (!canProceed) {
       alert("일일 사용량을 모두 소진했습니다. 내일 다시 시도하거나 프리미엄으로 업그레이드하세요!");
       setShowSubModal(true);
@@ -228,8 +240,9 @@ export default function App() {
       );
       setResult(data);
 
-      // 대화 기록 저장
-      if (user) {
+      // 3. 실제 AI 응답이 생성될 때만 (추가 정보 요청이 아닐 때만) 차감 및 저장
+      if (user && !data.isClarificationNeeded) {
+        await incrementUsage(user.uid);
         await saveChatHistory(user.uid, userInput, selectedCategory, data);
         setUsageCount(prev => prev + 1);
       }
@@ -366,23 +379,7 @@ export default function App() {
             )}
 
             {/* Hero Section */}
-            <div className="text-center mb-12">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                <div className="flex items-center justify-center gap-4 mb-6">
-                  <h1 className="text-4xl md:text-6xl font-bold text-slate-900 tracking-tight leading-tight">
-                    Firebase 통합 프리미엄<br />
-                    <span className="gradient-text">AI 비즈니스 아키텍트</span>
-                  </h1>
-                </div>
-                <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-                  로그인 후 당신의 멤버십 등급({userGrade})에 맞는 최적화된 분석을 경험하세요.<br />
-                  모든 데이터는 Firestore를 통해 안전하게 관리됩니다.
-                </p>
-              </motion.div>
+            <LandingPageHeader />
 
           {/* User Subscription Status */}
           {user && (
@@ -437,7 +434,6 @@ export default function App() {
               </button>
             ))}
           </div>
-        </div>
 
         {/* Input Section */}
         <div className="max-w-3xl mx-auto mb-16">
@@ -525,6 +521,12 @@ export default function App() {
                   <p className="text-amber-800 text-lg mb-8 leading-relaxed">
                     {result.clarificationMessage}
                   </p>
+                  <div className="mb-8 p-3 bg-amber-100/50 rounded-xl inline-block">
+                    <p className="text-amber-700 text-sm font-bold flex items-center gap-2 justify-center">
+                      <ShieldCheck className="w-4 h-4" />
+                      이 요청은 일일 사용 횟수에 포함되지 않았습니다.
+                    </p>
+                  </div>
                   <button 
                     onClick={() => {
                       setResult(null);
@@ -665,9 +667,9 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
-          </div>
-        </div>
-      </main>
+      </div>
+    </div>
+  </main>
 
       {/* Footer */}
       <footer className="border-t border-slate-200 py-12 bg-white mt-24">

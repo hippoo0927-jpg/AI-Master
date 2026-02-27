@@ -56,9 +56,9 @@ export function subscribeToChatHistory(userId: string, callback: (history: ChatH
 }
 
 /**
- * 일일 사용량 체크 및 업데이트
+ * 일일 사용량 체크 (차감하지 않음)
  */
-export async function checkAndUpdateUsage(userId: string, grade: string) {
+export async function checkUsage(userId: string, grade: string) {
   const userRef = doc(db, 'users', userId);
   const userDoc = await getDoc(userRef);
   
@@ -72,26 +72,35 @@ export async function checkAndUpdateUsage(userId: string, grade: string) {
 
   // 날짜가 바뀌었으면 리셋
   if (!lastReset || !now.isSame(lastReset, 'day')) {
-    currentCount = 0;
     await updateDoc(userRef, {
       usageCount: 0,
       lastUsageReset: serverTimestamp()
     });
+    return true;
   }
 
-  // 프리미엄은 제한 없음 (또는 매우 높음)
+  // 프리미엄은 제한 없음
   if (grade === 'premium') return true;
 
   // 무료 사용자는 일일 5회 제한
-  if (currentCount >= 5) {
-    return false;
+  return currentCount < 5;
+}
+
+/**
+ * 사용량 1회 증가
+ */
+export async function incrementUsage(userId: string) {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    if (!userDoc.exists()) return;
+
+    const currentCount = userDoc.data().usageCount || 0;
+    await updateDoc(userRef, {
+      usageCount: currentCount + 1,
+      lastUsageReset: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Error incrementing usage:", error);
   }
-
-  // 사용량 증가
-  await updateDoc(userRef, {
-    usageCount: currentCount + 1,
-    lastUsageReset: serverTimestamp()
-  });
-
-  return true;
 }
