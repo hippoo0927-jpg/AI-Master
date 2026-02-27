@@ -2,13 +2,19 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // API Key Priority: User Input > Environment Variable
 const getFinalApiKey = (customApiKey?: string) => {
+  // 사용자 입력 키가 존재하면 환경변수를 완전히 무시
+  if (customApiKey?.trim()) {
+    const finalKey = customApiKey.trim();
+    console.log(`[Gemini Auth] 사용 중인 키 소스: 사용자 직접 입력 (키 앞 4자리: ${finalKey.substring(0, 4)}****)`);
+    return finalKey;
+  }
+
   const envKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
-  const finalKey = (customApiKey?.trim() || envKey.trim());
+  const finalKey = envKey.trim();
   
   // Debug Logging
-  const source = customApiKey?.trim() ? "사용자 직접 입력" : "Vercel 환경변수";
   const maskedKey = finalKey ? `${finalKey.substring(0, 4)}****` : "없음";
-  console.log(`[Gemini Auth] 사용 중인 키 소스: ${source} (키 앞 4자리: ${maskedKey})`);
+  console.log(`[Gemini Auth] 사용 중인 키 소스: Vercel 환경변수 (키 앞 4자리: ${maskedKey})`);
   
   return finalKey;
 };
@@ -21,11 +27,9 @@ const getAIInstance = (customApiKey?: string) => {
 };
 
 // 모델을 가져오는 헬퍼 함수 (표준 형식 강제)
-const getModel = (genAI: GoogleGenerativeAI, modelName: string) => {
-  // v1beta 엔드포인트는 "gemini-1.5-flash" 형식을 가장 안정적으로 인식함.
-  // "-latest"가 포함되어 있다면 제거하여 순수한 모델명만 사용.
-  const targetModel = modelName.replace("-latest", "");
-  return genAI.getGenerativeModel({ model: targetModel });
+const getModel = (genAI: GoogleGenerativeAI, _modelName: string) => {
+  // 현재 계정에서 활성화된 'gemini-2.5-flash'를 기본값으로 강제 사용
+  return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 };
 
 /**
@@ -33,7 +37,7 @@ const getModel = (genAI: GoogleGenerativeAI, modelName: string) => {
  */
 export async function testDirectConnection(apiKey: string) {
   const finalKey = apiKey.trim();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${finalKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${finalKey}`;
   
   try {
     const response = await fetch(url, {
@@ -71,7 +75,7 @@ export const SYSTEM_INSTRUCTION = `
    - 데이터 분석(Excel/CSV): 수치 기반 트렌드 분석, 성과 지표(KPI) 계산 및 ROI 수치화.
 
 [AI 플랫폼 추천 가이드]
-- 대용량 문서 분석 및 다중 파일 처리: [Gemini 1.5 Pro] 최우선 추천.
+- 대용량 문서 분석 및 다중 파일 처리: [Gemini 2.5 Flash] 최우선 추천.
 - 정교한 데이터 분석 및 수식 처리: [ChatGPT-4o (ADA)] 추천.
 - 실시간 트렌드 및 SNS 분석 포함 시: [Grok] 추천.
 - 창의적 묘사 및 감성적 리라이팅: [Claude 3.5 Sonnet] 추천.
@@ -109,10 +113,10 @@ export const SYSTEM_INSTRUCTION = `
 export async function testApiKey(apiKey: string) {
   const sanitizedKey = apiKey.trim();
   
-  // 1. SDK를 통한 테스트 (모델명을 gemini-1.5-flash로 고정)
+  // 1. SDK를 통한 테스트 (모델명을 gemini-2.5-flash로 고정)
   try {
     const genAI = new GoogleGenerativeAI(sanitizedKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent("ping");
     if (result.response.text()) return true;
   } catch (sdkError: any) {
@@ -137,7 +141,7 @@ export async function generateConsulting(
   customApiKey?: string, // 유저가 등록한 개인 키
   selectedModel?: string // 유저가 선택한 모델
 ) {
-  const modelName = selectedModel || "gemini-1.5-flash";
+  const modelName = selectedModel || "gemini-2.5-flash";
   const genAI = getAIInstance(customApiKey);
   const model = getModel(genAI, modelName);
   
@@ -210,7 +214,7 @@ export async function* generateConsultingStream(
   customApiKey?: string,
   selectedModel?: string
 ) {
-  const modelName = selectedModel || "gemini-1.5-flash";
+  const modelName = selectedModel || "gemini-2.5-flash";
   const genAI = getAIInstance(customApiKey);
   const model = getModel(genAI, modelName);
   
@@ -271,4 +275,5 @@ export async function* generateConsultingStream(
 function base64ToBlobData(base64: string) {
   return base64.replace(/^data:.*?;base64,/, "");
 }
+
 
