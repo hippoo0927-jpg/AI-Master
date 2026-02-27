@@ -82,40 +82,60 @@ const ExpertChat: React.FC = () => {
   const [showKeyModal, setShowKeyModal] = useState(false);
 
   useEffect(() => {
+    let unsubHistory: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // Clean up previous history listener if it exists
+      if (unsubHistory) {
+        unsubHistory();
+        unsubHistory = null;
+      }
+
       setUser(currentUser);
+      
       if (currentUser) {
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setUserGrade(data.grade || 'free');
-          setCustomApiKey(data.customApiKey || null);
+        try {
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUserGrade(data.grade || 'free');
+            setCustomApiKey(data.customApiKey || null);
+          }
+
+          // Fetch History
+          const isAdmin = currentUser.email === 'hippoo0927@gmail.com';
+          const historyQuery = query(
+            collection(db, 'expert_chats'),
+            where('userId', '==', currentUser.uid),
+            orderBy('createdAt', 'desc'),
+            limit(isAdmin ? 100 : 10)
+          );
+
+          unsubHistory = onSnapshot(historyQuery, (snapshot) => {
+            const items = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })) as ExpertChatHistory[];
+            setHistory(items);
+            setIsAuthLoading(false);
+          }, (error) => {
+            console.error("History fetch error:", error);
+            setIsAuthLoading(false);
+          });
+        } catch (error) {
+          console.error("Auth state processing error:", error);
+          setIsAuthLoading(false);
         }
-
-        // Fetch History
-        const isAdmin = currentUser.email === 'hippoo0927@gmail.com';
-        const historyQuery = query(
-          collection(db, 'expert_chats'),
-          where('userId', '==', currentUser.uid),
-          orderBy('createdAt', 'desc'),
-          limit(isAdmin ? 100 : 10) // Admin: 100, Premium: 10
-        );
-
-        const unsubHistory = onSnapshot(historyQuery, (snapshot) => {
-          const items = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as ExpertChatHistory[];
-          setHistory(items);
-        });
-
-        return () => unsubHistory();
       } else {
         setHistory([]);
+        setIsAuthLoading(false);
       }
-      setIsAuthLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (unsubHistory) unsubHistory();
+    };
   }, []);
 
   useEffect(() => {
