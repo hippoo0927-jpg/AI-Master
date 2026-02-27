@@ -299,6 +299,7 @@ export default function App() {
                   grade={userGrade} 
                   usageCount={usageCount} 
                   expiryDate={userExpiryDate} 
+                  hasCustomKey={!!customApiKey}
                 />
               )}
 

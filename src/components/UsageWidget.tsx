@@ -11,9 +11,10 @@ interface UsageWidgetProps {
   grade: string;
   usageCount: number;
   expiryDate?: Timestamp;
+  hasCustomKey?: boolean;
 }
 
-export default function UsageWidget({ grade, usageCount, expiryDate }: UsageWidgetProps) {
+export default function UsageWidget({ grade, usageCount, expiryDate, hasCustomKey }: UsageWidgetProps) {
   const isPremium = grade === 'premium';
   const limit = 5;
   const progress = Math.min((usageCount / limit) * 100, 100);
@@ -58,9 +59,16 @@ export default function UsageWidget({ grade, usageCount, expiryDate }: UsageWidg
             </div>
           </div>
           <div className="w-px h-8 bg-slate-100" />
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-500" />
-            <span className="text-[10px] font-bold text-slate-500">Free</span>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-500" />
+              <span className="text-[10px] font-bold text-slate-500">
+                {hasCustomKey ? 'Personal Key' : (grade === 'free' ? 'Free' : 'Basic')}
+              </span>
+            </div>
+            <p className="text-[9px] text-slate-400 font-medium">
+              {hasCustomKey ? '개인 키 사용 중 (일일 제한 적용)' : '일일 제한 횟수 내 이용 가능'}
+            </p>
           </div>
         </div>
       )}

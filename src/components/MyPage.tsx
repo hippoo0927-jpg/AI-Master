@@ -79,7 +79,7 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
       await updateDoc(doc(db, 'users', userId), {
         customApiKey: apiKey.trim() || null
       });
-      alert('API 키가 성공적으로 저장되었습니다.');
+      alert('개인 키가 등록되었습니다. 플랫폼 정책에 따라 일일 5회 사용 제한은 동일하게 유지됩니다.');
       onClose();
     } catch (error) {
       console.error('Save Error:', error);
@@ -104,7 +104,7 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-slate-900">개인 API 키 설정 (BYOK)</h2>
-                <p className="text-slate-500 text-sm">자신만의 독립적인 할당량으로 쾌적하게 이용하세요.</p>
+                <p className="text-slate-500 text-sm">자신만의 API 키를 사용하여 분석을 수행합니다.</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
@@ -118,10 +118,10 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
               <Zap className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
-              <p className="text-indigo-900 font-bold text-sm mb-1">헤비 유저 권장 사항</p>
+              <p className="text-indigo-900 font-bold text-sm mb-1">운영 정책 안내</p>
               <p className="text-indigo-700 text-xs leading-relaxed">
-                개인 API 키를 등록하시면 일일 사용 한도 제한 없이 더 쾌적하게 이용하실 수 있습니다. 
-                입력하신 키는 본인 계정에만 안전하게 저장되며, AI 기능 호출 시에만 사용됩니다.
+                개인 API 키를 등록하시더라도 플랫폼의 공정한 이용을 위해 <strong>일일 5회 사용 제한은 동일하게 적용</strong>됩니다. 
+                개인 키 사용 시에도 모든 데이터는 본인 계정에만 안전하게 관리됩니다.
               </p>
             </div>
           </div>
