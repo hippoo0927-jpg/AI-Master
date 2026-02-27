@@ -29,9 +29,10 @@ interface ApiKeySettingsProps {
 export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps) {
   const [apiKey, setApiKey] = useState('');
   const [savedKey, setSavedKey] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash-latest');
+  const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
+  const [testErrorMessage, setTestErrorMessage] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -47,7 +48,7 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
         const key = data.customApiKey || '';
         setApiKey(key);
         setSavedKey(key || null);
-        setSelectedModel(data.selectedModel || 'gemini-1.5-flash-latest');
+        setSelectedModel(data.selectedModel || 'gemini-1.5-flash');
         if (key) setIsVerified(true);
       }
     };
@@ -57,6 +58,7 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
   const handleApiKeyChange = (value: string) => {
     setApiKey(value);
     setTestResult(null);
+    setTestErrorMessage(null);
     setIsVerified(false);
   };
 
@@ -65,16 +67,25 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
     if (!trimmedKey) return;
     setIsTesting(true);
     setTestResult(null);
-    const success = await testApiKey(trimmedKey);
+    setTestErrorMessage(null);
     
-    if (success) {
-      setTestResult('success');
-      setIsVerified(true);
-    } else {
+    try {
+      const success = await testApiKey(trimmedKey);
+      
+      if (success) {
+        setTestResult('success');
+        setIsVerified(true);
+      } else {
+        setTestResult('fail');
+        setIsVerified(false);
+      }
+    } catch (error: any) {
       setTestResult('fail');
+      setTestErrorMessage(error.message || "연결 테스트 중 오류가 발생했습니다.");
       setIsVerified(false);
+    } finally {
+      setIsTesting(false);
     }
-    setIsTesting(false);
   };
 
   const handleSave = async () => {
@@ -223,8 +234,8 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
                   <p className="text-xs font-bold text-slate-500 mb-3">사용할 모델 선택</p>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash', desc: '빠른 속도 & 효율성' },
-                      { id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro', desc: '복잡한 추론 & 대용량' }
+                      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', desc: '빠른 속도 & 효율성' },
+                      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', desc: '복잡한 추론 & 대용량' }
                     ].map((m) => (
                       <button
                         key={m.id}
@@ -332,9 +343,12 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
             {testResult === 'fail' && (
               <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex gap-3">
                 <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-                <p className="text-xs text-rose-700 leading-relaxed">
-                  API 키가 유효하지 않습니다. 키가 정확한지, 혹은 발급받은 프로젝트의 할당량이 남아있는지 확인해주세요.
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs text-rose-700 font-bold">연결 실패</p>
+                  <p className="text-xs text-rose-600 leading-relaxed">
+                    {testErrorMessage || "API 키가 유효하지 않거나 서버 응답이 없습니다. 키를 다시 확인해주세요."}
+                  </p>
+                </div>
               </div>
             )}
           </div>

@@ -99,7 +99,7 @@ export default function App() {
   const [userExpiryDate, setUserExpiryDate] = useState<any>(null);
   const [usageCount, setUsageCount] = useState<number>(0);
   const [customApiKey, setCustomApiKey] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash-latest');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
   const [streamingText, setStreamingText] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingError, setStreamingError] = useState<string | null>(null);
@@ -130,7 +130,7 @@ export default function App() {
           setUserGrade(data.grade || 'free');
           setUserExpiryDate(data.expiryDate || null);
           setCustomApiKey(data.customApiKey || null);
-          setSelectedModel(data.selectedModel || 'gemini-1.5-flash-latest');
+          setSelectedModel(data.selectedModel || 'gemini-1.5-flash');
           setUsageCount(data.usageCount || 0);
         } else {
           // 신규 유저인 경우 기본 등급으로 생성
@@ -139,14 +139,14 @@ export default function App() {
             grade: 'free',
             expiryDate: null,
             customApiKey: null,
-            selectedModel: 'gemini-1.5-flash-latest',
+            selectedModel: 'gemini-1.5-flash',
             usageCount: 0,
             createdAt: new Date()
           });
           setUserGrade('free');
           setUserExpiryDate(null);
           setCustomApiKey(null);
-          setSelectedModel('gemini-1.5-flash-latest');
+          setSelectedModel('gemini-1.5-flash');
           setUsageCount(0);
         }
 
@@ -159,7 +159,7 @@ export default function App() {
         setUserGrade('free');
         setUserExpiryDate(null);
         setCustomApiKey(null);
-        setSelectedModel('gemini-1.5-flash-latest');
+        setSelectedModel('gemini-1.5-flash');
         setUsageCount(0);
         setChatHistory([]);
       }
