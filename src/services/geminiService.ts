@@ -9,9 +9,14 @@ const getAIInstance = (customApiKey?: string) => {
   return new GoogleGenerativeAI(apiKey);
 };
 
-// 모델을 가져오는 헬퍼 함수 (v1 엔드포인트 강제)
-const getModel = (genAI: GoogleGenerativeAI, modelName: string) => {
-  return genAI.getGenerativeModel({ model: modelName }, { apiVersion: "v1" });
+// 모델을 가져오는 헬퍼 함수 (v1 엔드포인트 우선, 실패 시 v1beta 고려)
+const getModel = (genAI: GoogleGenerativeAI, modelName: string, apiVersion: string = "v1") => {
+  // 사용자가 입력한 모델명이 1.5 시리즈인데 -latest가 없으면 붙여주는 처리 (호환성)
+  let targetModel = modelName;
+  if ((modelName === "gemini-1.5-flash" || modelName === "gemini-1.5-pro") && !modelName.endsWith("-latest")) {
+    targetModel = `${modelName}-latest`;
+  }
+  return genAI.getGenerativeModel({ model: targetModel }, { apiVersion });
 };
 
 export const SYSTEM_INSTRUCTION = `
@@ -60,23 +65,43 @@ export const SYSTEM_INSTRUCTION = `
 `;
 
 /**
- * API 키 유효성 테스트 함수
+ * API 키 유효성 테스트 함수 (Retry 로직 포함)
  */
 export async function testApiKey(apiKey: string) {
-  try {
-    const sanitizedKey = apiKey.trim();
-    const genAI = new GoogleGenerativeAI(sanitizedKey);
-    // v1 엔드포인트와 표준 모델명 사용
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: "v1" });
-    const response = await model.generateContent("ping");
-    return response.response.text() !== undefined;
-  } catch (error: any) {
-    console.error("API Key Test Error:", error);
-    if (error.message?.includes("404") || error.status === 404) {
-      throw new Error("API 서버와의 호환성 문제입니다. 모델 설정을 변경하거나 v1 엔드포인트 권한을 확인해 주세요.");
+  const sanitizedKey = apiKey.trim();
+  const genAI = new GoogleGenerativeAI(sanitizedKey);
+  
+  // 시도할 모델 및 버전 조합
+  const attempts = [
+    { model: "gemini-1.5-flash-latest", version: "v1" },
+    { model: "gemini-1.5-flash", version: "v1" },
+    { model: "gemini-1.5-flash-latest", version: "v1beta" },
+  ];
+
+  let lastError = null;
+
+  for (const attempt of attempts) {
+    try {
+      const model = genAI.getGenerativeModel({ model: attempt.model }, { apiVersion: attempt.version });
+      const response = await model.generateContent("ping");
+      if (response.response.text()) return true;
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`Attempt failed for ${attempt.model} on ${attempt.version}:`, error.message);
+      // 404가 아닌 다른 에러(예: 401 Invalid Key)면 즉시 중단
+      if (!error.message?.includes("404") && error.status !== 404) {
+        throw error;
+      }
     }
-    throw error;
   }
+
+  if (lastError) {
+    if (lastError.message?.includes("404") || lastError.status === 404) {
+      throw new Error("API 서버에서 모델을 찾을 수 없습니다. API 키의 권한이나 지역 제한을 확인해 주세요.");
+    }
+    throw lastError;
+  }
+  return false;
 }
 
 export async function generateConsulting(
@@ -88,11 +113,12 @@ export async function generateConsulting(
   customApiKey?: string, // 유저가 등록한 개인 키
   selectedModel?: string // 유저가 선택한 모델
 ) {
-  const modelName = selectedModel || "gemini-1.5-flash";
+  const modelName = selectedModel || "gemini-1.5-flash-latest";
   const genAI = getAIInstance(customApiKey);
-  const model = getModel(genAI, modelName);
   
-  try {
+  // 실행 로직 (내부에서 getModel 사용)
+  const executeWithRetry = async (version: string) => {
+    const model = getModel(genAI, modelName, version);
     const prompt = `
       유저 등급(Firebase Grade): ${grade}
       카테고리: ${category}
@@ -103,7 +129,6 @@ export async function generateConsulting(
     `;
 
     const parts: any[] = [{ text: prompt }];
-
     if (fileData) {
       parts.push({
         inlineData: {
@@ -113,7 +138,7 @@ export async function generateConsulting(
       });
     }
 
-    const result = await model.generateContent({
+    return await model.generateContent({
       contents: [{ role: "user", parts }],
       generationConfig: {
         responseMimeType: "application/json",
@@ -123,9 +148,20 @@ export async function generateConsulting(
         maxOutputTokens: 2048,
       }
     });
+  };
 
-    const responseText = result.response.text();
-    return JSON.parse(responseText || "{}");
+  try {
+    try {
+      const result = await executeWithRetry("v1");
+      return JSON.parse(result.response.text() || "{}");
+    } catch (error: any) {
+      // v1에서 404 발생 시 v1beta로 재시도
+      if (error.message?.includes("404") || error.status === 404) {
+        const result = await executeWithRetry("v1beta");
+        return JSON.parse(result.response.text() || "{}");
+      }
+      throw error;
+    }
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     
@@ -160,11 +196,11 @@ export async function* generateConsultingStream(
   customApiKey?: string,
   selectedModel?: string
 ) {
-  const modelName = selectedModel || "gemini-1.5-flash";
+  const modelName = selectedModel || "gemini-1.5-flash-latest";
   const genAI = getAIInstance(customApiKey);
-  const model = getModel(genAI, modelName);
   
-  try {
+  const executeStream = async function* (version: string) {
+    const model = getModel(genAI, modelName, version);
     const prompt = `
       유저 등급(Firebase Grade): ${grade}
       카테고리: ${category}
@@ -175,7 +211,6 @@ export async function* generateConsultingStream(
     `;
 
     const parts: any[] = [{ text: prompt }];
-
     if (fileData) {
       parts.push({
         inlineData: {
@@ -198,6 +233,18 @@ export async function* generateConsultingStream(
       const chunkText = chunk.text();
       if (chunkText) {
         yield chunkText;
+      }
+    }
+  };
+
+  try {
+    try {
+      yield* executeStream("v1");
+    } catch (error: any) {
+      if (error.message?.includes("404") || error.status === 404) {
+        yield* executeStream("v1beta");
+      } else {
+        throw error;
       }
     }
   } catch (error: any) {
