@@ -26,7 +26,8 @@ import {
   FileSearch,
   LogOut,
   LogIn,
-  Key
+  Key,
+  History
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -36,6 +37,15 @@ import AdminDashboard from './components/AdminDashboard';
 import UserSubscriptionStatus from './components/UserSubscriptionStatus';
 import LoginModal from './components/LoginModal';
 import MyPage from './components/MyPage';
+import UsageWidget from './components/UsageWidget';
+import ChatHistorySidebar from './components/ChatHistorySidebar';
+import QuickPrompts from './components/QuickPrompts';
+import { 
+  saveChatHistory, 
+  subscribeToChatHistory, 
+  checkAndUpdateUsage, 
+  ChatHistoryItem 
+} from './services/chatService';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { initializeApp } from 'firebase/app';
@@ -102,10 +112,13 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userGrade, setUserGrade] = useState<string>('free'); // 기본 등급: free
   const [userExpiryDate, setUserExpiryDate] = useState<any>(null);
+  const [usageCount, setUsageCount] = useState<number>(0);
   const [customApiKey, setCustomApiKey] = useState<string | null>(null);
   const [showSubModal, setShowSubModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showMyPage, setShowMyPage] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // 인증 상태 감시 및 Firestore 등급 동기화
   useEffect(() => {
@@ -121,6 +134,7 @@ export default function App() {
           setUserGrade(data.grade || 'free');
           setUserExpiryDate(data.expiryDate || null);
           setCustomApiKey(data.customApiKey || null);
+          setUsageCount(data.usageCount || 0);
         } else {
           // 신규 유저인 경우 기본 등급으로 생성
           await setDoc(userDocRef, {
@@ -128,16 +142,26 @@ export default function App() {
             grade: 'free',
             expiryDate: null,
             customApiKey: null,
+            usageCount: 0,
             createdAt: new Date()
           });
           setUserGrade('free');
           setUserExpiryDate(null);
           setCustomApiKey(null);
+          setUsageCount(0);
         }
+
+        // 대화 기록 구독
+        const unsubHistory = subscribeToChatHistory(currentUser.uid, (history) => {
+          setChatHistory(history);
+        });
+        return () => unsubHistory();
       } else {
         setUserGrade('free');
         setUserExpiryDate(null);
         setCustomApiKey(null);
+        setUsageCount(0);
+        setChatHistory([]);
       }
     });
     return () => unsubscribe();
@@ -190,6 +214,14 @@ export default function App() {
     if (!(await ensureAuth())) return;
     if (!userInput.trim() && !file) return;
 
+    // 사용량 체크
+    const canProceed = await checkAndUpdateUsage(user!.uid, userGrade);
+    if (!canProceed) {
+      alert("일일 사용량을 모두 소진했습니다. 내일 다시 시도하거나 프리미엄으로 업그레이드하세요!");
+      setShowSubModal(true);
+      return;
+    }
+
     // Free 등급 유저가 파일 분석을 시도할 때 (이미지 외 파일)
     if (userGrade === 'free' && file && !file.mimeType.startsWith('image/')) {
       setShowSubModal(true);
@@ -209,8 +241,14 @@ export default function App() {
         customApiKey || undefined
       );
       setResult(data);
-    } catch (error) {
-      alert('상담 중 오류가 발생했습니다. 다시 시도해주세요.');
+
+      // 대화 기록 저장
+      if (user) {
+        await saveChatHistory(user.uid, userInput, selectedCategory, data);
+        setUsageCount(prev => prev + 1);
+      }
+    } catch (error: any) {
+      alert(error.message || '상담 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setIsLoading(false);
     }
@@ -257,6 +295,14 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-4">
+              {user && (
+                <UsageWidget 
+                  grade={userGrade} 
+                  usageCount={usageCount} 
+                  expiryDate={userExpiryDate} 
+                />
+              )}
+
               {user ? (
                 <div className="flex items-center gap-4">
                   <div 
@@ -298,29 +344,53 @@ export default function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Admin Dashboard - Only for hippoo0927@gmail.com */}
-        {user?.email === 'hippoo0927@gmail.com' && (
-          <div className="mb-16">
-            <AdminDashboard />
-          </div>
-        )}
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Sidebar */}
+          {user && (
+            <ChatHistorySidebar 
+              history={chatHistory} 
+              onSelectChat={(chat) => {
+                setUserInput(chat.userInput);
+                setSelectedCategory(chat.category);
+                setResult(chat.result);
+              }}
+              isOpen={isSidebarOpen}
+              onClose={() => setIsSidebarOpen(false)}
+            />
+          )}
 
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <h1 className="text-4xl md:text-6xl font-bold text-slate-900 mb-6 tracking-tight leading-tight">
-              Firebase 통합 프리미엄<br />
-              <span className="gradient-text">AI 비즈니스 아키텍트</span>
-            </h1>
-            <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-              로그인 후 당신의 멤버십 등급({userGrade})에 맞는 최적화된 분석을 경험하세요.<br />
-              모든 데이터는 Firestore를 통해 안전하게 관리됩니다.
-            </p>
-          </motion.div>
+          <div className="flex-1">
+            {/* Admin Dashboard - Only for hippoo0927@gmail.com */}
+            {user?.email === 'hippoo0927@gmail.com' && (
+              <div className="mb-16">
+                <AdminDashboard />
+              </div>
+            )}
+
+            {/* Hero Section */}
+            <div className="text-center mb-12">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <div className="flex items-center justify-center gap-4 mb-6">
+                  <button 
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="lg:hidden p-2 bg-slate-100 rounded-xl text-slate-600"
+                  >
+                    <History className="w-6 h-6" />
+                  </button>
+                  <h1 className="text-4xl md:text-6xl font-bold text-slate-900 tracking-tight leading-tight">
+                    Firebase 통합 프리미엄<br />
+                    <span className="gradient-text">AI 비즈니스 아키텍트</span>
+                  </h1>
+                </div>
+                <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
+                  로그인 후 당신의 멤버십 등급({userGrade})에 맞는 최적화된 분석을 경험하세요.<br />
+                  모든 데이터는 Firestore를 통해 안전하게 관리됩니다.
+                </p>
+              </motion.div>
 
           {/* User Subscription Status */}
           {user && (
@@ -379,6 +449,8 @@ export default function App() {
 
         {/* Input Section */}
         <div className="max-w-3xl mx-auto mb-16">
+          <QuickPrompts onSelect={(prompt) => setUserInput(prev => prev + prompt)} />
+          
           <div className="relative bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <textarea
               value={userInput}
@@ -601,6 +673,8 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+          </div>
+        </div>
       </main>
 
       {/* Footer */}
