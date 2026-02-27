@@ -24,6 +24,7 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
   const [apiKey, setApiKey] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'fail' | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const db = getFirestore();
 
@@ -31,28 +32,55 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
     const fetchUserKey = async () => {
       const userDoc = await getDoc(doc(db, 'users', userId));
       if (userDoc.exists()) {
-        setApiKey(userDoc.data().customApiKey || '');
+        const key = userDoc.data().customApiKey || '';
+        setApiKey(key);
+        // 이미 저장된 키가 있다면 일단 검증된 상태로 간주 (수정 시 리셋됨)
+        if (key) setIsVerified(true);
       }
     };
     fetchUserKey();
   }, [userId, db]);
 
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value);
+    setTestResult(null);
+    setIsVerified(false); // 키 수정 시 검증 상태 초기화
+  };
+
   const handleTest = async () => {
-    if (!apiKey.trim()) return;
+    if (!apiKey.trim()) {
+      // 키를 비우는 경우는 테스트 없이 저장 가능하게 할 수 있으나, 
+      // 여기서는 입력이 있는 경우에만 테스트 진행
+      return;
+    }
     setIsTesting(true);
     setTestResult(null);
     const success = await testApiKey(apiKey);
-    setTestResult(success ? 'success' : 'fail');
+    
+    if (success) {
+      setTestResult('success');
+      setIsVerified(true);
+    } else {
+      setTestResult('fail');
+      setIsVerified(false);
+    }
     setIsTesting(false);
   };
 
   const handleSave = async () => {
+    // 방어 로직: 키가 입력되어 있는데 검증되지 않았다면 차단
+    if (apiKey.trim() && !isVerified) {
+      alert('먼저 연결 테스트를 완료해주세요.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       await updateDoc(doc(db, 'users', userId), {
         customApiKey: apiKey.trim() || null
       });
       alert('API 키가 성공적으로 저장되었습니다.');
+      onClose();
     } catch (error) {
       console.error('Save Error:', error);
       alert('저장 중 오류가 발생했습니다.');
@@ -116,13 +144,18 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
                 <input 
                   type="password" 
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
                   placeholder="AIzaSy..."
                   className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono text-sm"
                 />
                 {testResult === 'success' && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />}
                 {testResult === 'fail' && <XCircle className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
               </div>
+              {testResult === 'success' && (
+                <p className="mt-2 text-xs text-emerald-600 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> 연결 확인되었습니다. 이제 저장할 수 있습니다.
+                </p>
+              )}
               <p className="mt-2 text-[11px] text-slate-400 flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3" /> 입력하신 키는 암호화되어 Firestore에 안전하게 저장됩니다.
               </p>
@@ -139,8 +172,12 @@ export default function MyPage({ userId, onClose }: MyPageProps) {
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving}
-                className="flex-[2] flex items-center justify-center gap-2 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 disabled:opacity-50"
+                disabled={isSaving || (apiKey.trim() !== '' && !isVerified)}
+                className={`flex-[2] flex items-center justify-center gap-2 py-4 rounded-2xl font-bold transition-all shadow-xl disabled:opacity-50 ${
+                  isVerified || apiKey.trim() === ''
+                    ? "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200"
+                    : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                }`}
               >
                 {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                 키 저장하기
