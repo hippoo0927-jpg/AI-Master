@@ -14,7 +14,9 @@ import {
   Settings,
   Trash2,
   ChevronDown,
-  Cpu
+  Cpu,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { doc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -39,6 +41,7 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -274,14 +277,24 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
                 </div>
                 <div className="relative">
                   <input 
-                    type="password" 
+                    type={showKey ? "text" : "password"} 
                     value={apiKey}
                     onChange={(e) => handleApiKeyChange(e.target.value)}
                     placeholder="AIzaSy..."
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono text-sm"
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono text-sm pr-24"
                   />
-                  {testResult === 'success' && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />}
-                  {testResult === 'fail' && <XCircle className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      title={showKey ? "키 가리기" : "키 보기"}
+                    >
+                      {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                    {testResult === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                    {testResult === 'fail' && <XCircle className="w-5 h-5 text-rose-500" />}
+                  </div>
                 </div>
                 {testResult === 'success' && (
                   <p className="mt-2 text-xs text-emerald-600 font-bold flex items-center gap-1">
