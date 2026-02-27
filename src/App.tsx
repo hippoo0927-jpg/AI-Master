@@ -34,7 +34,7 @@ import SubscriptionModal from './components/SubscriptionModal';
 import AdminDashboard from './components/AdminDashboard';
 import UserSubscriptionStatus from './components/UserSubscriptionStatus';
 import LoginModal from './components/LoginModal';
-import MyPage from './components/MyPage';
+import ApiKeySettings from './components/ApiKeySettings';
 import UsageWidget from './components/UsageWidget';
 import ChatHistorySidebar from './components/ChatHistorySidebar';
 import SidebarButton from './components/SidebarButton';
@@ -95,6 +95,7 @@ export default function App() {
   const [userExpiryDate, setUserExpiryDate] = useState<any>(null);
   const [usageCount, setUsageCount] = useState<number>(0);
   const [customApiKey, setCustomApiKey] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
   const [showSubModal, setShowSubModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showMyPage, setShowMyPage] = useState(false);
@@ -122,6 +123,7 @@ export default function App() {
           setUserGrade(data.grade || 'free');
           setUserExpiryDate(data.expiryDate || null);
           setCustomApiKey(data.customApiKey || null);
+          setSelectedModel(data.selectedModel || 'gemini-1.5-flash');
           setUsageCount(data.usageCount || 0);
         } else {
           // 신규 유저인 경우 기본 등급으로 생성
@@ -130,12 +132,14 @@ export default function App() {
             grade: 'free',
             expiryDate: null,
             customApiKey: null,
+            selectedModel: 'gemini-1.5-flash',
             usageCount: 0,
             createdAt: new Date()
           });
           setUserGrade('free');
           setUserExpiryDate(null);
           setCustomApiKey(null);
+          setSelectedModel('gemini-1.5-flash');
           setUsageCount(0);
         }
 
@@ -148,6 +152,7 @@ export default function App() {
         setUserGrade('free');
         setUserExpiryDate(null);
         setCustomApiKey(null);
+        setSelectedModel('gemini-1.5-flash');
         setUsageCount(0);
         setChatHistory([]);
       }
@@ -236,7 +241,8 @@ export default function App() {
         selectedPlatform, 
         userGrade,
         file ? { mimeType: file.mimeType, data: file.data } : undefined,
-        customApiKey || undefined
+        customApiKey || undefined,
+        selectedModel
       );
       setResult(data);
 
@@ -274,9 +280,9 @@ export default function App() {
         userEmail={user?.email || ""} 
       />
 
-      {/* MyPage Modal */}
+      {/* MyPage Modal (ApiKeySettings) */}
       {showMyPage && user && (
-        <MyPage 
+        <ApiKeySettings 
           userId={user.uid} 
           onClose={() => setShowMyPage(false)} 
         />

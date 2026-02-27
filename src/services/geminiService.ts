@@ -60,7 +60,7 @@ export async function testApiKey(apiKey: string) {
   try {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: "Hello, this is a test connection. Please reply with 'OK'.",
       config: { maxOutputTokens: 10 }
     });
@@ -77,9 +77,10 @@ export async function generateConsulting(
   preferredPlatform: string, 
   grade: string, 
   fileData?: { mimeType: string; data: string },
-  customApiKey?: string // 유저가 등록한 개인 키
+  customApiKey?: string, // 유저가 등록한 개인 키
+  selectedModel?: string // 유저가 선택한 모델
 ) {
-  const model = "gemini-3-flash-preview";
+  const model = selectedModel || "gemini-1.5-flash";
   const ai = getAIInstance(customApiKey);
   
   try {
