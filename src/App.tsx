@@ -30,6 +30,7 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { generateConsulting } from './services/geminiService';
+import SubscriptionModal from './components/SubscriptionModal';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { initializeApp } from 'firebase/app';
@@ -95,6 +96,7 @@ export default function App() {
   // --- Firebase 상태 관리 ---
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userGrade, setUserGrade] = useState<string>('free'); // 기본 등급: free
+  const [showSubModal, setShowSubModal] = useState(false);
 
   // 인증 상태 감시 및 Firestore 등급 동기화
   useEffect(() => {
@@ -139,16 +141,31 @@ export default function App() {
     setResult(null);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // 비회원 또는 로그인 안된 상태에서 파일 업로드 시도 시 차단
+  // --- AuthCheck: 비로그인 차단 로직 ---
+  const ensureAuth = async () => {
     if (!user) {
       alert("로그인 후 이용 가능합니다.");
+      handleLogin();
+      return false;
+    }
+    return true;
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!(await ensureAuth())) {
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
+      // 프리미엄 등급이 아닌데 이미지가 아닌 파일을 올리려 할 때 체크
+      if (userGrade === 'free' && !selectedFile.type.startsWith('image/')) {
+        setShowSubModal(true);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = (event.target?.result as string).split(',')[1];
@@ -163,7 +180,15 @@ export default function App() {
   };
 
   const handleConsult = async () => {
+    if (!(await ensureAuth())) return;
     if (!userInput.trim() && !file) return;
+
+    // Free 등급 유저가 파일 분석을 시도할 때 (이미지 외 파일)
+    if (userGrade === 'free' && file && !file.mimeType.startsWith('image/')) {
+      setShowSubModal(true);
+      return;
+    }
+
     setIsLoading(true);
     setResult(null);
     try {
@@ -191,6 +216,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen font-sans selection:bg-indigo-100">
+      {/* Subscription Modal */}
+      <SubscriptionModal 
+        isOpen={showSubModal} 
+        onClose={() => setShowSubModal(false)} 
+        userEmail={user?.email || ""} 
+      />
+
       {/* Navigation */}
       <nav className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -205,7 +237,13 @@ export default function App() {
             <div className="flex items-center gap-4">
               {user ? (
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl">
+                  <div 
+                    onClick={() => userGrade === 'free' && setShowSubModal(true)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-xl cursor-pointer transition-all",
+                      userGrade === 'premium' ? "bg-amber-50 border border-amber-200" : "bg-slate-100 hover:bg-slate-200"
+                    )}
+                  >
                     {userGrade === 'premium' ? <Crown className="w-4 h-4 text-amber-500" /> : <User className="w-4 h-4 text-slate-500" />}
                     <span className="text-xs font-bold text-slate-700 uppercase">{userGrade} Member</span>
                   </div>

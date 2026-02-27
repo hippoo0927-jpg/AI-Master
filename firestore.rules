@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 유저 문서 규칙
+    match /users/{userId} {
+      // 본인 문서만 읽기 가능
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // 생성 시: 본인 UID와 일치해야 하며, 등급은 반드시 'free'로 시작해야 함
+      allow create: if request.auth != null && request.auth.uid == userId 
+                    && request.resource.data.grade == 'free';
+      
+      // 수정 시: 등급(grade) 필드는 절대 수정 불가 (관리자만 가능)
+      allow update: if request.auth != null && request.auth.uid == userId
+                    && request.resource.data.grade == resource.data.grade;
+      
+      // 삭제 불가
+      allow delete: if false;
+    }
+  }
+}
