@@ -1,23 +1,64 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// 기본 관리자 키 설정
-const DEFAULT_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
+// API Key Priority: User Input > Environment Variable
+const getFinalApiKey = (customApiKey?: string) => {
+  const envKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
+  const finalKey = (customApiKey?.trim() || envKey.trim());
+  
+  // Debug Logging
+  const source = customApiKey?.trim() ? "사용자 직접 입력" : "Vercel 환경변수";
+  const maskedKey = finalKey ? `${finalKey.substring(0, 4)}****` : "없음";
+  console.log(`[Gemini Auth] 사용 중인 키 소스: ${source} (키 앞 4자리: ${maskedKey})`);
+  
+  return finalKey;
+};
 
-// 인스턴스 생성을 위한 헬퍼 함수
+// 인스턴스 생성을 위한 헬퍼 함수 (Instance Refresh 강제)
 const getAIInstance = (customApiKey?: string) => {
-  const apiKey = (customApiKey || DEFAULT_API_KEY).trim();
+  const apiKey = getFinalApiKey(customApiKey);
+  if (!apiKey) throw new Error("API 키가 설정되지 않았습니다.");
   return new GoogleGenerativeAI(apiKey);
 };
 
-// 모델을 가져오는 헬퍼 함수 (v1 엔드포인트 우선, 실패 시 v1beta 고려)
-const getModel = (genAI: GoogleGenerativeAI, modelName: string, apiVersion: string = "v1") => {
+// 모델을 가져오는 헬퍼 함수 (표준 형식 강제)
+const getModel = (genAI: GoogleGenerativeAI, modelName: string) => {
   // 사용자가 입력한 모델명이 1.5 시리즈인데 -latest가 없으면 붙여주는 처리 (호환성)
   let targetModel = modelName;
   if ((modelName === "gemini-1.5-flash" || modelName === "gemini-1.5-pro") && !modelName.endsWith("-latest")) {
     targetModel = `${modelName}-latest`;
   }
-  return genAI.getGenerativeModel({ model: targetModel }, { apiVersion });
+  return genAI.getGenerativeModel({ model: targetModel });
 };
+
+/**
+ * 표준 fetch를 사용한 직접 연결 테스트 (SDK 404 에러 대비 Fallback)
+ */
+export async function testDirectConnection(apiKey: string) {
+  const finalKey = apiKey.trim();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${finalKey}`;
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: "ping" }] }]
+      })
+    });
+    
+    const data = await response.json();
+    if (response.ok) {
+      console.log("[Gemini Direct] 연결 성공:", data);
+      return true;
+    } else {
+      console.error("[Gemini Direct] 연결 실패:", data);
+      throw new Error(data.error?.message || `HTTP Error ${response.status}`);
+    }
+  } catch (error: any) {
+    console.error("[Gemini Direct] 네트워크 오류:", error);
+    throw error;
+  }
+}
 
 export const SYSTEM_INSTRUCTION = `
 당신은 전방위 파일 분석 기능을 탑재한 '프리미엄 AI 비즈니스 아키텍트'입니다.
@@ -43,7 +84,7 @@ export const SYSTEM_INSTRUCTION = `
 - 등급에 맞지 않는 파일 업로드 시 정중하게 업그레이드를 권유하십시오.
 
 [출력 형식 가이드라인]
-반드시 다음 구조를 포함하는 JSON 형태로 응답하세요:
+반드시 다음 구조를 포함하는 JSON 형태로 응답하세요. 다른 설명이나 텍스트는 절대 포함하지 마십시오:
 {
   "isClarificationNeeded": boolean,
   "clarificationMessage": "정보 부족 또는 파일 업로드 안내 (필요 없으면 null)",
@@ -65,41 +106,26 @@ export const SYSTEM_INSTRUCTION = `
 `;
 
 /**
- * API 키 유효성 테스트 함수 (Retry 로직 포함)
+ * API 키 유효성 테스트 함수
  */
 export async function testApiKey(apiKey: string) {
   const sanitizedKey = apiKey.trim();
-  const genAI = new GoogleGenerativeAI(sanitizedKey);
   
-  // 시도할 모델 및 버전 조합
-  const attempts = [
-    { model: "gemini-1.5-flash-latest", version: "v1" },
-    { model: "gemini-1.5-flash", version: "v1" },
-    { model: "gemini-1.5-flash-latest", version: "v1beta" },
-  ];
-
-  let lastError = null;
-
-  for (const attempt of attempts) {
+  // 1. SDK를 통한 테스트
+  try {
+    const genAI = new GoogleGenerativeAI(sanitizedKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent("ping");
+    if (result.response.text()) return true;
+  } catch (sdkError: any) {
+    console.warn("[Gemini SDK] 테스트 실패, Direct Fetch 시도...", sdkError.message);
+    
+    // 2. SDK 실패 시 Direct Fetch로 재시도 (404 등 라이브러리 이슈 대응)
     try {
-      const model = genAI.getGenerativeModel({ model: attempt.model }, { apiVersion: attempt.version });
-      const response = await model.generateContent("ping");
-      if (response.response.text()) return true;
-    } catch (error: any) {
-      lastError = error;
-      console.warn(`Attempt failed for ${attempt.model} on ${attempt.version}:`, error.message);
-      // 404가 아닌 다른 에러(예: 401 Invalid Key)면 즉시 중단
-      if (!error.message?.includes("404") && error.status !== 404) {
-        throw error;
-      }
+      return await testDirectConnection(sanitizedKey);
+    } catch (directError: any) {
+      throw directError;
     }
-  }
-
-  if (lastError) {
-    if (lastError.message?.includes("404") || lastError.status === 404) {
-      throw new Error("API 서버에서 모델을 찾을 수 없습니다. API 키의 권한이나 지역 제한을 확인해 주세요.");
-    }
-    throw lastError;
   }
   return false;
 }
@@ -113,69 +139,59 @@ export async function generateConsulting(
   customApiKey?: string, // 유저가 등록한 개인 키
   selectedModel?: string // 유저가 선택한 모델
 ) {
-  const modelName = selectedModel || "gemini-1.5-flash-latest";
+  const modelName = selectedModel || "gemini-1.5-flash";
   const genAI = getAIInstance(customApiKey);
+  const model = getModel(genAI, modelName);
   
-  // 실행 로직 (내부에서 getModel 사용)
-  const executeWithRetry = async (version: string) => {
-    const model = getModel(genAI, modelName, version);
-    const prompt = `
-      유저 등급(Firebase Grade): ${grade}
-      카테고리: ${category}
-      선호 플랫폼: ${preferredPlatform}
-      사용자 요청: ${userRequest}
-      
-      시스템 지침: ${SYSTEM_INSTRUCTION}
-    `;
+  const prompt = `
+    유저 등급(Firebase Grade): ${grade}
+    카테고리: ${category}
+    선호 플랫폼: ${preferredPlatform}
+    사용자 요청: ${userRequest}
+    
+    시스템 지침: ${SYSTEM_INSTRUCTION}
+    
+    결과는 반드시 JSON 형식으로만 응답하세요.
+  `;
 
-    const parts: any[] = [{ text: prompt }];
-    if (fileData) {
-      parts.push({
-        inlineData: {
-          mimeType: fileData.mimeType,
-          data: base64ToBlobData(fileData.data)
-        }
-      });
-    }
+  const parts: any[] = [{ text: prompt }];
+  if (fileData) {
+    parts.push({
+      inlineData: {
+        mimeType: fileData.mimeType,
+        data: base64ToBlobData(fileData.data)
+      }
+    });
+  }
 
-    return await model.generateContent({
+  try {
+    const result = await model.generateContent({
       contents: [{ role: "user", parts }],
       generationConfig: {
-        responseMimeType: "application/json",
         temperature: 0.7,
         topP: 0.95,
         topK: 40,
         maxOutputTokens: 2048,
       }
     });
-  };
-
-  try {
-    try {
-      const result = await executeWithRetry("v1");
-      return JSON.parse(result.response.text() || "{}");
-    } catch (error: any) {
-      // v1에서 404 발생 시 v1beta로 재시도
-      if (error.message?.includes("404") || error.status === 404) {
-        const result = await executeWithRetry("v1beta");
-        return JSON.parse(result.response.text() || "{}");
-      }
-      throw error;
-    }
+    
+    const text = result.response.text() || "{}";
+    // JSON만 추출하기 위한 정규식 (마크다운 코드 블록 등 제거)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : text;
+    
+    return JSON.parse(jsonStr);
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     
-    // 할당량 초과(429) 에러 핸들링
     if (error.message?.includes("429") || error.status === 429) {
       throw new Error("현재 요청이 많습니다. 잠시 후 다시 시도해주세요.");
     }
 
-    // Pro 모델 권한 에러 (403)
     if (modelName.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
       throw new Error("현재 API 키가 Pro 모델을 지원하지 않습니다. Flash로 변경하거나 권한을 확인해 주세요.");
     }
 
-    // 개인 키 오류 핸들링
     if (customApiKey && (error.message?.includes("API_KEY_INVALID") || error.status === 401 || error.status === 403)) {
       throw new Error("등록된 API 키가 유효하지 않습니다. 설정을 확인해주세요.");
     }
@@ -196,34 +212,35 @@ export async function* generateConsultingStream(
   customApiKey?: string,
   selectedModel?: string
 ) {
-  const modelName = selectedModel || "gemini-1.5-flash-latest";
+  const modelName = selectedModel || "gemini-1.5-flash";
   const genAI = getAIInstance(customApiKey);
+  const model = getModel(genAI, modelName);
   
-  const executeStream = async function* (version: string) {
-    const model = getModel(genAI, modelName, version);
-    const prompt = `
-      유저 등급(Firebase Grade): ${grade}
-      카테고리: ${category}
-      선호 플랫폼: ${preferredPlatform}
-      사용자 요청: ${userRequest}
-      
-      시스템 지침: ${SYSTEM_INSTRUCTION}
-    `;
+  const prompt = `
+    유저 등급(Firebase Grade): ${grade}
+    카테고리: ${category}
+    선호 플랫폼: ${preferredPlatform}
+    사용자 요청: ${userRequest}
+    
+    시스템 지침: ${SYSTEM_INSTRUCTION}
+    
+    결과는 반드시 JSON 형식으로만 응답하세요.
+  `;
 
-    const parts: any[] = [{ text: prompt }];
-    if (fileData) {
-      parts.push({
-        inlineData: {
-          mimeType: fileData.mimeType,
-          data: base64ToBlobData(fileData.data)
-        }
-      });
-    }
+  const parts: any[] = [{ text: prompt }];
+  if (fileData) {
+    parts.push({
+      inlineData: {
+        mimeType: fileData.mimeType,
+        data: base64ToBlobData(fileData.data)
+      }
+    });
+  }
 
+  try {
     const result = await model.generateContentStream({
       contents: [{ role: "user", parts }],
       generationConfig: {
-        responseMimeType: "application/json",
         temperature: 0.7,
         maxOutputTokens: 2048,
       }
@@ -235,27 +252,25 @@ export async function* generateConsultingStream(
         yield chunkText;
       }
     }
-  };
-
-  try {
-    try {
-      yield* executeStream("v1");
-    } catch (error: any) {
-      if (error.message?.includes("404") || error.status === 404) {
-        yield* executeStream("v1beta");
-      } else {
-        throw error;
-      }
-    }
   } catch (error: any) {
     console.error("Gemini Stream Error:", error);
-    if (modelName.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
-      throw new Error("현재 API 키가 Pro 모델을 지원하지 않습니다. Flash로 변경하거나 권한을 확인해 주세요.");
+    
+    // 스트리밍 실패 시 일반 generateContent로 전환 시도
+    try {
+      console.log("Streaming failed, falling back to non-streaming...");
+      const nonStreamResult = await generateConsulting(userRequest, category, preferredPlatform, grade, fileData, customApiKey, selectedModel);
+      yield JSON.stringify(nonStreamResult);
+    } catch (fallbackError: any) {
+      if (modelName.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
+        throw new Error("현재 API 키가 Pro 모델을 지원하지 않습니다. Flash로 변경하거나 권한을 확인해 주세요.");
+      }
+      throw error;
     }
-    throw error;
   }
 }
+
 
 function base64ToBlobData(base64: string) {
   return base64.replace(/^data:.*?;base64,/, "");
 }
+

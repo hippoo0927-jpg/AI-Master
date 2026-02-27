@@ -73,12 +73,13 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
     setTestErrorMessage(null);
     
     try {
+      // testApiKey는 내부적으로 new GoogleGenerativeAI를 호출하여 인스턴스를 새로 생성합니다 (Instance Refresh)
       const success = await testApiKey(trimmedKey);
       
       if (success) {
         setTestResult('success');
         setIsVerified(true);
-        window.alert('연결 테스트에 성공했습니다! 이제 키를 저장하실 수 있습니다.');
+        window.alert("새 프로젝트 키 연결 성공! 모델이 활성화되었습니다.");
       } else {
         setTestResult('fail');
         setIsVerified(false);
