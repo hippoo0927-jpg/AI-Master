@@ -2,7 +2,9 @@ import {
   History, 
   MessageSquare, 
   ChevronRight, 
-  Clock 
+  Clock,
+  Plus,
+  X
 } from 'lucide-react';
 import { ChatHistoryItem } from '../services/chatService';
 import dayjs from 'dayjs';
@@ -10,35 +12,55 @@ import dayjs from 'dayjs';
 interface ChatHistorySidebarProps {
   history: ChatHistoryItem[];
   onSelectChat: (chat: ChatHistoryItem) => void;
+  onNewChat: () => void;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export default function ChatHistorySidebar({ history, onSelectChat, isOpen, onClose }: ChatHistorySidebarProps) {
+export default function ChatHistorySidebar({ history, onSelectChat, onNewChat, isOpen, onClose }: ChatHistorySidebarProps) {
   return (
     <>
       {/* Mobile Overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[60] lg:hidden" 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] lg:hidden" 
           onClick={onClose}
         />
       )}
 
       <aside className={`
-        fixed top-16 bottom-0 left-0 w-72 bg-white border-r border-slate-200 z-[70] transition-transform duration-300 ease-in-out
+        fixed top-0 bottom-0 left-0 w-72 bg-white border-r border-slate-200 z-[70] transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0 lg:static lg:h-auto lg:z-0
       `}>
         <div className="p-6 h-full flex flex-col">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
-              <History className="w-4 h-4 text-slate-600" />
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                <History className="w-4 h-4 text-indigo-600" />
+              </div>
+              <h2 className="font-bold text-slate-900">최근 대화 기록</h2>
             </div>
-            <h2 className="font-bold text-slate-900">최근 대화 기록</h2>
+            <button 
+              onClick={onClose}
+              className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3">
+          {/* New Chat Button */}
+          <button
+            onClick={() => {
+              onNewChat();
+              onClose();
+            }}
+            className="w-full mb-6 flex items-center justify-center gap-2 p-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 group"
+          >
+            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+            새 대화 시작하기
+          </button>
+
+          <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
             {history.length === 0 ? (
               <div className="text-center py-12">
                 <MessageSquare className="w-10 h-10 text-slate-200 mx-auto mb-3" />

@@ -26,3 +26,18 @@ body {
 .markdown-body code { @apply bg-slate-100 px-1 rounded font-mono text-sm; }
 .markdown-body pre { @apply bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto mb-4 font-mono text-sm; }
 
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-300;
+  }
+}
+

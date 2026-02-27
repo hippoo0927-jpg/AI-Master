@@ -29,8 +29,6 @@ import {
   Key,
   History
 } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import { generateConsulting } from './services/geminiService';
 import SubscriptionModal from './components/SubscriptionModal';
 import AdminDashboard from './components/AdminDashboard';
@@ -39,6 +37,7 @@ import LoginModal from './components/LoginModal';
 import MyPage from './components/MyPage';
 import UsageWidget from './components/UsageWidget';
 import ChatHistorySidebar from './components/ChatHistorySidebar';
+import SidebarButton from './components/SidebarButton';
 import QuickPrompts from './components/QuickPrompts';
 import { 
   saveChatHistory, 
@@ -51,10 +50,7 @@ import {
 import { onAuthStateChanged, signOut, User as FirebaseUser, signInWithPopup } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from './lib/utils';
 
 type Category = {
   id: string;
@@ -102,6 +98,13 @@ export default function App() {
   const [showMyPage, setShowMyPage] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const handleNewChat = () => {
+    setUserInput('');
+    setResult(null);
+    setFile(null);
+    setSelectedCategory('marketing');
+  };
 
   // 인증 상태 감시 및 Firestore 등급 동기화
   useEffect(() => {
@@ -327,7 +330,7 @@ export default function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex flex-col lg:flex-row gap-8">
+        <div className="flex flex-col lg:flex-row gap-8 min-h-[calc(100vh-200px)]">
           {/* Sidebar */}
           {user && (
             <ChatHistorySidebar 
@@ -337,12 +340,24 @@ export default function App() {
                 setSelectedCategory(chat.category);
                 setResult(chat.result);
               }}
+              onNewChat={handleNewChat}
               isOpen={isSidebarOpen}
               onClose={() => setIsSidebarOpen(false)}
             />
           )}
 
-          <div className="flex-1">
+          {/* Sidebar Toggle Button */}
+          {user && (
+            <SidebarButton 
+              isOpen={isSidebarOpen} 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+            />
+          )}
+
+          <div className={cn(
+            "flex-1 transition-all duration-300",
+            isSidebarOpen && user ? "lg:ml-72" : "lg:ml-0"
+          )}>
             {/* Admin Dashboard - Only for hippoo0927@gmail.com */}
             {user?.email === 'hippoo0927@gmail.com' && (
               <div className="mb-16">
@@ -358,12 +373,6 @@ export default function App() {
                 transition={{ duration: 0.5 }}
               >
                 <div className="flex items-center justify-center gap-4 mb-6">
-                  <button 
-                    onClick={() => setIsSidebarOpen(true)}
-                    className="lg:hidden p-2 bg-slate-100 rounded-xl text-slate-600"
-                  >
-                    <History className="w-6 h-6" />
-                  </button>
                   <h1 className="text-4xl md:text-6xl font-bold text-slate-900 tracking-tight leading-tight">
                     Firebase 통합 프리미엄<br />
                     <span className="gradient-text">AI 비즈니스 아키텍트</span>
