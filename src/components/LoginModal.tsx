@@ -17,6 +17,7 @@ import {
 import { 
   getFirestore, 
   doc, 
+  getDoc,
   setDoc, 
   serverTimestamp 
 } from 'firebase/firestore';
@@ -61,18 +62,26 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
-      // Firestore에 유저 정보 저장 (Merge)
+      // Firestore에 유저 정보 조회
       const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, {
+      const userDoc = await getDoc(userDocRef);
+
+      const userData: any = {
         email: user.email,
         displayName: user.displayName,
         photoURL: user.photoURL,
         agreedToTerms: true,
         lastLogin: serverTimestamp(),
-        // 신규 유저일 때만 기본값 설정
-        grade: 'free',
-        createdAt: serverTimestamp(),
-      }, { merge: true });
+      };
+
+      // 신규 유저인 경우에만 기본값 설정
+      if (!userDoc.exists()) {
+        userData.grade = 'free';
+        userData.createdAt = serverTimestamp();
+      }
+
+      // Firestore에 유저 정보 저장 (Merge)
+      await setDoc(userDocRef, userData, { merge: true });
 
       onClose();
     } catch (error) {

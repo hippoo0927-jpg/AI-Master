@@ -21,6 +21,7 @@ service cloud.firestore {
                     && (!('expiryDate' in request.resource.data) || request.resource.data.expiryDate == null);
       
       // 수정 시: 등급(grade) 및 만료일(expiryDate) 필드는 절대 수정 불가 (관리자만 가능)
+      // 개인 API 키(customApiKey)는 본인만 수정 가능
       allow update: if request.auth != null && request.auth.uid == userId
                     && request.resource.data.grade == resource.data.grade
                     && request.resource.data.expiryDate == resource.data.expiryDate;

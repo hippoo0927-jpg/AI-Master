@@ -25,7 +25,8 @@ import {
   Crown,
   FileSearch,
   LogOut,
-  LogIn
+  LogIn,
+  Key
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -34,6 +35,7 @@ import SubscriptionModal from './components/SubscriptionModal';
 import AdminDashboard from './components/AdminDashboard';
 import UserSubscriptionStatus from './components/UserSubscriptionStatus';
 import LoginModal from './components/LoginModal';
+import MyPage from './components/MyPage';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { initializeApp } from 'firebase/app';
@@ -100,15 +102,17 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userGrade, setUserGrade] = useState<string>('free'); // 기본 등급: free
   const [userExpiryDate, setUserExpiryDate] = useState<any>(null);
+  const [customApiKey, setCustomApiKey] = useState<string | null>(null);
   const [showSubModal, setShowSubModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showMyPage, setShowMyPage] = useState(false);
 
   // 인증 상태 감시 및 Firestore 등급 동기화
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Firestore에서 유저 등급 및 만료일 조회
+        // Firestore에서 유저 등급, 만료일, 개인 API 키 조회
         const userDocRef = doc(db, 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         
@@ -116,20 +120,24 @@ export default function App() {
           const data = userDoc.data();
           setUserGrade(data.grade || 'free');
           setUserExpiryDate(data.expiryDate || null);
+          setCustomApiKey(data.customApiKey || null);
         } else {
           // 신규 유저인 경우 기본 등급으로 생성
           await setDoc(userDocRef, {
             email: currentUser.email,
             grade: 'free',
             expiryDate: null,
+            customApiKey: null,
             createdAt: new Date()
           });
           setUserGrade('free');
           setUserExpiryDate(null);
+          setCustomApiKey(null);
         }
       } else {
         setUserGrade('free');
         setUserExpiryDate(null);
+        setCustomApiKey(null);
       }
     });
     return () => unsubscribe();
@@ -191,13 +199,14 @@ export default function App() {
     setIsLoading(true);
     setResult(null);
     try {
-      // Gemini API 호출 시 Firebase에서 조회한 userGrade 전달
+      // Gemini API 호출 시 Firebase에서 조회한 userGrade 및 customApiKey 전달
       const data = await generateConsulting(
         userInput, 
         selectedCategory, 
         selectedPlatform, 
         userGrade,
-        file ? { mimeType: file.mimeType, data: file.data } : undefined
+        file ? { mimeType: file.mimeType, data: file.data } : undefined,
+        customApiKey || undefined
       );
       setResult(data);
     } catch (error) {
@@ -228,6 +237,14 @@ export default function App() {
         userEmail={user?.email || ""} 
       />
 
+      {/* MyPage Modal */}
+      {showMyPage && user && (
+        <MyPage 
+          userId={user.uid} 
+          onClose={() => setShowMyPage(false)} 
+        />
+      )}
+
       {/* Navigation */}
       <nav className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -253,6 +270,13 @@ export default function App() {
                     <span className="text-xs font-bold text-slate-700 uppercase">{userGrade} Member</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setShowMyPage(true)}
+                      className="p-2 text-slate-500 hover:text-indigo-600 transition-colors"
+                      title="개인 설정"
+                    >
+                      <Key className="w-5 h-5" />
+                    </button>
                     <img src={user.photoURL || ""} alt="profile" className="w-8 h-8 rounded-full border border-slate-200" />
                     <button onClick={handleLogout} className="text-slate-500 hover:text-rose-500 transition-colors">
                       <LogOut className="w-5 h-5" />
