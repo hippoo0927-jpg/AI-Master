@@ -27,9 +27,13 @@ import {
   LogOut,
   LogIn,
   Key,
-  History
+  History,
+  AlertCircle
 } from 'lucide-react';
-import { generateConsulting } from './services/geminiService';
+import { 
+  generateConsulting, 
+  generateConsultingStream 
+} from './services/geminiService';
 import SubscriptionModal from './components/SubscriptionModal';
 import AdminDashboard from './components/AdminDashboard';
 import UserSubscriptionStatus from './components/UserSubscriptionStatus';
@@ -96,6 +100,9 @@ export default function App() {
   const [usageCount, setUsageCount] = useState<number>(0);
   const [customApiKey, setCustomApiKey] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
+  const [streamingText, setStreamingText] = useState<string>('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingError, setStreamingError] = useState<string | null>(null);
   const [showSubModal, setShowSubModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showMyPage, setShowMyPage] = useState(false);
@@ -233,9 +240,13 @@ export default function App() {
 
     setIsLoading(true);
     setResult(null);
+    setStreamingText('');
+    setIsStreaming(true);
+    setStreamingError(null);
+
     try {
-      // Gemini API 호출 시 Firebase에서 조회한 userGrade 및 customApiKey 전달
-      const data = await generateConsulting(
+      let fullText = '';
+      const stream = generateConsultingStream(
         userInput, 
         selectedCategory, 
         selectedPlatform, 
@@ -244,16 +255,40 @@ export default function App() {
         customApiKey || undefined,
         selectedModel
       );
-      setResult(data);
 
-      // 3. 실제 AI 응답이 생성될 때만 (추가 정보 요청이 아닐 때만) 차감 및 저장
-      if (user && !data.isClarificationNeeded) {
-        await incrementUsage(user.uid);
-        await saveChatHistory(user.uid, userInput, selectedCategory, data);
-        setUsageCount(prev => prev + 1);
+      try {
+        for await (const chunk of stream) {
+          fullText += chunk;
+          setStreamingText(fullText);
+        }
+      } catch (streamError: any) {
+        console.error("Stream interrupted:", streamError);
+        setStreamingError(streamError.message || "스트리밍 중 연결이 끊겼습니다.");
+        // 스트리밍 중단 시에도 지금까지 받은 텍스트로 파싱 시도
+      }
+
+      if (fullText) {
+        try {
+          const data = JSON.parse(fullText);
+          setResult(data);
+          setIsStreaming(false);
+
+          // 3. 실제 AI 응답이 생성될 때만 (추가 정보 요청이 아닐 때만) 차감 및 저장
+          if (user && !data.isClarificationNeeded) {
+            await incrementUsage(user.uid);
+            await saveChatHistory(user.uid, userInput, selectedCategory, data);
+            setUsageCount(prev => prev + 1);
+          }
+        } catch (parseError) {
+          console.error("JSON Parse Error:", parseError);
+          if (!streamingError) {
+            setStreamingError("응답 형식이 올바르지 않습니다. 다시 시도해주세요.");
+          }
+        }
       }
     } catch (error: any) {
-      alert(error.message || '상담 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setIsStreaming(false);
+      setStreamingError(error.message || '상담 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -511,6 +546,49 @@ export default function App() {
 
         {/* Results Section */}
         <AnimatePresence mode="wait">
+          {isStreaming && !result && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-4xl mx-auto"
+            >
+              <div className="bg-slate-900 rounded-[2rem] p-8 shadow-2xl border border-slate-800 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500/20">
+                  <motion.div 
+                    className="h-full bg-indigo-500"
+                    animate={{ x: ['-100%', '100%'] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  />
+                </div>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center">
+                    <Cpu className="w-5 h-5 text-indigo-400 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold">AI 아키텍트 분석 중...</h3>
+                    <p className="text-slate-400 text-xs">실시간으로 전략을 수립하고 있습니다.</p>
+                  </div>
+                </div>
+                <div className="font-mono text-sm text-indigo-300/90 leading-relaxed whitespace-pre-wrap h-[300px] overflow-y-auto custom-scrollbar">
+                  {streamingText || "분석 엔진 가동 중..."}
+                  {!streamingError && (
+                    <motion.span 
+                      animate={{ opacity: [0, 1, 0] }}
+                      transition={{ duration: 0.8, repeat: Infinity }}
+                      className="inline-block w-2 h-4 bg-indigo-400 ml-1 align-middle"
+                    />
+                  )}
+                  {streamingError && (
+                    <div className="mt-4 p-4 bg-rose-500/20 border border-rose-500/50 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      {streamingError}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {result && (
             <motion.div
               initial={{ opacity: 0, y: 40 }}

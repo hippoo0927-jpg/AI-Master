@@ -154,12 +154,73 @@ export async function generateConsulting(
       throw new Error("현재 요청이 많습니다. 잠시 후 다시 시도해주세요.");
     }
 
+    // Pro 모델 권한 에러 (403)
+    if (model.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
+      throw new Error("현재 API 키가 Pro 모델을 지원하지 않습니다. Flash로 변경하거나 권한을 확인해 주세요.");
+    }
+
     // 개인 키 오류 핸들링
     if (customApiKey && (error.message?.includes("API_KEY_INVALID") || error.status === 401 || error.status === 403)) {
       throw new Error("등록된 API 키가 유효하지 않습니다. 설정을 확인해주세요.");
     }
     
     throw new Error("AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+  }
+}
+
+/**
+ * 스트리밍 상담 생성
+ */
+export async function* generateConsultingStream(
+  userRequest: string, 
+  category: string, 
+  preferredPlatform: string, 
+  grade: string, 
+  fileData?: { mimeType: string; data: string },
+  customApiKey?: string,
+  selectedModel?: string
+) {
+  const model = selectedModel || "gemini-1.5-flash";
+  const ai = getAIInstance(customApiKey);
+  
+  try {
+    const parts: any[] = [
+      { text: `유저 등급(Firebase Grade): ${grade}\n카테고리: ${category}\n선호 플랫폼: ${preferredPlatform}\n사용자 요청: ${userRequest}` }
+    ];
+
+    if (fileData) {
+      parts.push({
+        inlineData: {
+          mimeType: fileData.mimeType,
+          data: base64ToBlobData(fileData.data)
+        }
+      });
+    }
+
+    const result = await ai.models.generateContentStream({
+      model,
+      contents: [{ parts }],
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        // 스트리밍 시에는 JSON 스키마를 사용하면 청크가 깨진 JSON이 될 수 있으므로 
+        // 텍스트로 받아서 나중에 파싱하거나, 혹은 JSON 모드에서 청크를 그대로 내보냅니다.
+        responseMimeType: "application/json",
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      }
+    });
+
+    for await (const chunk of result) {
+      if (chunk.text) {
+        yield chunk.text;
+      }
+    }
+  } catch (error: any) {
+    console.error("Gemini Stream Error:", error);
+    if (model.includes("pro") && (error.message?.includes("403") || error.status === 403)) {
+      throw new Error("현재 API 키가 Pro 모델을 지원하지 않습니다. Flash로 변경하거나 권한을 확인해 주세요.");
+    }
+    throw error;
   }
 }
 

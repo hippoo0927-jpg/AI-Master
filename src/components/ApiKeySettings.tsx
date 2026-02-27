@@ -61,10 +61,11 @@ export default function ApiKeySettings({ userId, onClose }: ApiKeySettingsProps)
   };
 
   const handleTest = async () => {
-    if (!apiKey.trim()) return;
+    const trimmedKey = apiKey.trim();
+    if (!trimmedKey) return;
     setIsTesting(true);
     setTestResult(null);
-    const success = await testApiKey(apiKey);
+    const success = await testApiKey(trimmedKey);
     
     if (success) {
       setTestResult('success');
