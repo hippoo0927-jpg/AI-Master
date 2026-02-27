@@ -22,11 +22,9 @@ const getAIInstance = (customApiKey?: string) => {
 
 // 모델을 가져오는 헬퍼 함수 (표준 형식 강제)
 const getModel = (genAI: GoogleGenerativeAI, modelName: string) => {
-  // 사용자가 입력한 모델명이 1.5 시리즈인데 -latest가 없으면 붙여주는 처리 (호환성)
-  let targetModel = modelName;
-  if ((modelName === "gemini-1.5-flash" || modelName === "gemini-1.5-pro") && !modelName.endsWith("-latest")) {
-    targetModel = `${modelName}-latest`;
-  }
+  // v1beta 엔드포인트는 "gemini-1.5-flash" 형식을 가장 안정적으로 인식함.
+  // "-latest"가 포함되어 있다면 제거하여 순수한 모델명만 사용.
+  const targetModel = modelName.replace("-latest", "");
   return genAI.getGenerativeModel({ model: targetModel });
 };
 
@@ -111,7 +109,7 @@ export const SYSTEM_INSTRUCTION = `
 export async function testApiKey(apiKey: string) {
   const sanitizedKey = apiKey.trim();
   
-  // 1. SDK를 통한 테스트
+  // 1. SDK를 통한 테스트 (모델명을 gemini-1.5-flash로 고정)
   try {
     const genAI = new GoogleGenerativeAI(sanitizedKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -120,7 +118,7 @@ export async function testApiKey(apiKey: string) {
   } catch (sdkError: any) {
     console.warn("[Gemini SDK] 테스트 실패, Direct Fetch 시도...", sdkError.message);
     
-    // 2. SDK 실패 시 Direct Fetch로 재시도 (404 등 라이브러리 이슈 대응)
+    // 2. SDK 실패 시 바로 Direct Fetch로 재시도 (404 등 라이브러리 이슈 대응)
     try {
       return await testDirectConnection(sanitizedKey);
     } catch (directError: any) {
