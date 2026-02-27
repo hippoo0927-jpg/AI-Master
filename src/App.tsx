@@ -28,7 +28,8 @@ import {
   LogIn,
   Key,
   History,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 import { 
   generateConsulting, 
@@ -51,6 +52,15 @@ import {
   incrementUsage,
   ChatHistoryItem 
 } from './services/chatService';
+
+import { 
+  BrowserRouter as Router, 
+  Routes, 
+  Route, 
+  useNavigate,
+  Link
+} from 'react-router-dom';
+import ExpertChat from './pages/ExpertChat';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { onAuthStateChanged, signOut, User as FirebaseUser, signInWithPopup } from 'firebase/auth';
@@ -84,6 +94,18 @@ const PLATFORMS = [
 ];
 
 export default function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/expert-chat" element={<ExpertChat />} />
+      </Routes>
+    </Router>
+  );
+}
+
+function Home() {
+  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>('marketing');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('recommend');
   const [userInput, setUserInput] = useState('');
@@ -387,33 +409,58 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex flex-col lg:flex-row gap-8 min-h-[calc(100vh-200px)]">
           {/* Sidebar */}
-          {user && (
-            <ChatHistorySidebar 
-              history={chatHistory} 
-              onSelectChat={(chat) => {
-                setUserInput(chat.userInput);
-                setSelectedCategory(chat.category);
-                setResult(chat.result);
-              }}
-              onNewChat={handleNewChat}
-              isOpen={isSidebarOpen}
-              onClose={() => setIsSidebarOpen(false)}
-            />
-          )}
+              {user && (
+                <ChatHistorySidebar 
+                  history={chatHistory} 
+                  onSelectChat={(chat) => {
+                    setUserInput(chat.userInput);
+                    setSelectedCategory(chat.category);
+                    setResult(chat.result);
+                  }}
+                  onNewChat={handleNewChat}
+                  isOpen={isSidebarOpen}
+                  onClose={() => setIsSidebarOpen(false)}
+                />
+              )}
 
-          {/* Sidebar Toggle Button */}
-          {user && (
-            <SidebarButton 
-              isOpen={isSidebarOpen} 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-            />
-          )}
+              {/* Sidebar Toggle Button */}
+              {user && (
+                <SidebarButton 
+                  isOpen={isSidebarOpen} 
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+                />
+              )}
 
-          <div className={cn(
-            "flex-1 transition-all duration-300",
-            isSidebarOpen && user ? "lg:ml-72" : "lg:ml-0"
-          )}>
-            {/* Admin Dashboard - Only for hippoo0927@gmail.com */}
+              <div className={cn(
+                "flex-1 transition-all duration-300",
+                isSidebarOpen && user ? "lg:ml-72" : "lg:ml-0"
+              )}>
+                {/* Premium Expert Chat Banner */}
+                <div className="mb-8">
+                  <Link 
+                    to="/expert-chat"
+                    className="flex items-center justify-between p-6 bg-slate-900 rounded-3xl border border-slate-800 hover:border-amber-500/50 transition-all group overflow-hidden relative"
+                  >
+                    <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                      <Crown className="w-32 h-32 text-amber-500" />
+                    </div>
+                    <div className="flex items-center gap-4 relative z-10">
+                      <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center border border-amber-500/20">
+                        <MessageSquare className="text-amber-500 w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-white font-bold text-lg">Architect Direct Chat (Premium)</h3>
+                        <p className="text-slate-400 text-sm">비즈니스 아키텍트와 실시간 1:1 전문가 상담을 시작하세요.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-amber-500 font-bold text-sm relative z-10">
+                      입장하기
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </Link>
+                </div>
+
+                {/* Admin Dashboard - Only for hippoo0927@gmail.com */}
             {user?.email === 'hippoo0927@gmail.com' && (
               <div className="mb-16">
                 <AdminDashboard />

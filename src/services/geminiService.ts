@@ -258,6 +258,39 @@ export async function generateConsulting(
 }
 
 /**
+ * 프리미엄 전문가 채팅 스트리밍
+ */
+export async function* generateExpertChatStream(
+  messages: { role: 'user' | 'model'; parts: { text: string }[] }[],
+  customApiKey?: string
+) {
+  const genAI = getAIInstance(customApiKey);
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash",
+    systemInstruction: SYSTEM_INSTRUCTION + "\n\n[Expert Chat Mode Override]\n이 채팅 모드에서는 JSON 형식을 무시하고, 유저와 직접 대화하는 마크다운 형식으로 답변하십시오. 전문적이고 아키텍트다운 어조를 유지하되, 대화형으로 응답하세요."
+  });
+
+  try {
+    const chat = model.startChat({
+      history: messages.slice(0, -1),
+    });
+
+    const lastMessage = messages[messages.length - 1].parts[0].text;
+    const result = await chat.sendMessageStream(lastMessage);
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      if (chunkText) {
+        yield chunkText;
+      }
+    }
+  } catch (error: any) {
+    console.error("Expert Chat Stream Error:", error);
+    throw error;
+  }
+}
+
+/**
  * 스트리밍 상담 생성
  */
 export async function* generateConsultingStream(
