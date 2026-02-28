@@ -50,7 +50,8 @@ import {
   subscribeToChatHistory, 
   checkUsage,
   incrementUsage,
-  ChatHistoryItem 
+  ChatHistoryItem,
+  useCoupon
 } from './services/chatService';
 
 import { 
@@ -97,10 +98,108 @@ const PLATFORMS = [
 ];
 
 import { ChatProvider } from './contexts/ChatContext';
+import { X } from 'lucide-react';
+
+function CouponModal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean, onClose: () => void, userId: string, onUpdate: () => void }) {
+  const [code, setCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleRegister = async () => {
+    if (!code.trim()) return;
+    setIsLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const benefit = await useCoupon(userId, code);
+      setSuccess(`쿠폰이 등록되었습니다! 무료 상담 혜택(${benefit}회)을 확인하세요.`);
+      onUpdate();
+      setTimeout(() => {
+        onClose();
+        setSuccess(null);
+        setCode('');
+      }, 2000);
+    } catch (err: any) {
+      setError(err.message || "쿠폰 등록 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+          >
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <Zap className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">쿠폰 등록</h3>
+                </div>
+                <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-500 mb-6">
+                보유하신 쿠폰 코드를 입력하시면 즉시 혜택이 지급됩니다. (계정당 1회 사용 가능)
+              </p>
+
+              <div className="space-y-4">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    placeholder="쿠폰 코드를 입력하세요"
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono tracking-widest text-lg text-center uppercase"
+                  />
+                </div>
+
+                {error && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {error}
+                  </motion.div>
+                )}
+
+                {success && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3 text-emerald-600 text-sm">
+                    <Check className="w-4 h-4 shrink-0" />
+                    {success}
+                  </motion.div>
+                )}
+
+                <button
+                  onClick={handleRegister}
+                  disabled={!code.trim() || isLoading || !!success}
+                  className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "등록하기"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userRole, setUserRole] = useState<string>('user');
+  const [showCouponModal, setShowCouponModal] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -121,7 +220,7 @@ export default function App() {
     <ChatProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Home key={refreshTrigger} onUpdate={() => setRefreshTrigger(prev => prev + 1)} onOpenCoupon={() => setShowCouponModal(true)} />} />
           <Route path="/expert-chat" element={<ExpertChat />} />
           <Route path="/experts" element={<ExpertsPage />} />
           <Route 
@@ -134,12 +233,20 @@ export default function App() {
           />
         </Routes>
         {user && <FloatingSupportChat user={user} />}
+        {user && (
+          <CouponModal 
+            isOpen={showCouponModal} 
+            onClose={() => setShowCouponModal(false)} 
+            userId={user.uid} 
+            onUpdate={() => setRefreshTrigger(prev => prev + 1)}
+          />
+        )}
       </Router>
     </ChatProvider>
   );
 }
 
-function Home() {
+function Home({ onUpdate, onOpenCoupon }: { onUpdate?: () => void, onOpenCoupon?: () => void }) {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>('marketing');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('recommend');
@@ -392,6 +499,15 @@ function Home() {
             </div>
             
             <div className="flex items-center gap-4">
+              {user && (
+                <button 
+                  onClick={onOpenCoupon}
+                  className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
+                >
+                  <Zap className="w-4 h-4" />
+                  쿠폰 등록
+                </button>
+              )}
               {user && (
                 <UsageWidget 
                   grade={userGrade} 

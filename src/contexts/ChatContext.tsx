@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { 
   collection, 
   query, 
@@ -22,6 +22,8 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeChat, setActiveChat] = useState<SupportChat | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const isFirstLoad = useRef(true);
+  const lastPlayedId = useRef<string | null>(null);
 
   const playUserSound = useCallback(() => {
     const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
@@ -47,13 +49,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const unsubscribeChat = onSnapshot(q, (snapshot) => {
           if (!snapshot.empty) {
-            const chatData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as SupportChat;
+            const chatDoc = snapshot.docs[0];
+            const chatData = { id: chatDoc.id, ...chatDoc.data() } as SupportChat;
             
-            // Check for new messages from model or admin to play sound
-            if (activeChat && chatData.messages.length > activeChat.messages.length) {
+            // Notification logic
+            if (!isFirstLoad.current) {
               const lastMsg = chatData.messages[chatData.messages.length - 1];
-              if (lastMsg.role === 'model' || lastMsg.role === 'admin') {
-                playUserSound();
+              if (lastMsg && (lastMsg.role === 'model' || lastMsg.role === 'admin')) {
+                const msgId = `${chatData.id}_${lastMsg.timestamp?.toMillis() || Date.now()}`;
+                if (msgId !== lastPlayedId.current) {
+                  playUserSound();
+                  lastPlayedId.current = msgId;
+                }
               }
             }
             
@@ -63,17 +70,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setActiveChat(null);
             setUnreadCount(0);
           }
+          isFirstLoad.current = false;
         });
 
         return () => unsubscribeChat();
       } else {
         setActiveChat(null);
         setUnreadCount(0);
+        isFirstLoad.current = true;
+        lastPlayedId.current = null;
       }
     });
 
     return () => unsubscribeAuth();
-  }, [activeChat, playUserSound]);
+  }, [playUserSound]);
 
   return (
     <ChatContext.Provider value={{ activeChat, unreadCount, playUserSound, playAdminSound }}>

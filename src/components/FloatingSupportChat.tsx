@@ -14,9 +14,10 @@ import {
   Timestamp,
   limit
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import { ChatMessage, SupportChat } from '../types';
 import { useChat } from '../contexts/ChatContext';
+import { cn } from '../lib/utils';
 
 interface FloatingSupportChatProps {
   user: any;
@@ -71,7 +72,13 @@ export default function FloatingSupportChat({ user }: FloatingSupportChatProps) 
   }, [activeChat?.messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || !user || !activeChat) return;
+    if (!input.trim() || !user || !activeChat || activeChat.status === 'closed') return;
+
+    if (input.trim() === '/대화종료') {
+      await closeChat();
+      setInput('');
+      return;
+    }
 
     const userMessage: ChatMessage = {
       role: 'user',
@@ -128,6 +135,21 @@ export default function FloatingSupportChat({ user }: FloatingSupportChatProps) 
     }
   };
 
+  const closeChat = async () => {
+    if (!activeChat) return;
+    const systemMessage: ChatMessage = {
+      role: 'model',
+      content: "상담이 종료되었습니다. 이용해 주셔서 감사합니다.",
+      timestamp: Timestamp.now()
+    };
+    await updateDoc(doc(db, 'support_chats', activeChat.id), {
+      messages: [...activeChat.messages, systemMessage],
+      status: 'closed',
+      lastMessageAt: serverTimestamp(),
+      unreadByAdmin: false
+    });
+  };
+
   const requestAgent = async () => {
     if (!activeChat) return;
     const systemMessage: ChatMessage = {
@@ -166,14 +188,32 @@ export default function FloatingSupportChat({ user }: FloatingSupportChatProps) 
                     <p className="text-[10px] opacity-60 uppercase tracking-widest font-bold">24/7 AI Support</p>
                   </div>
                 </div>
-                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {activeChat && activeChat.status !== 'closed' && (
+                    <button 
+                      onClick={closeChat}
+                      className="text-[10px] font-bold bg-white/10 hover:bg-white/20 px-2 py-1 rounded-lg transition-colors"
+                    >
+                      상담 종료
+                    </button>
+                  )}
+                  <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               
               <div className="flex items-center gap-2 text-xs bg-black/10 p-2 rounded-lg">
-                <div className={`w-2 h-2 rounded-full ${activeChat?.status === 'request_admin' ? 'bg-amber-400 animate-pulse' : activeChat?.status === 'manual' ? 'bg-blue-400' : 'bg-emerald-400'}`} />
-                {activeChat?.status === 'request_admin' ? '상담원 연결 대기 중' : activeChat?.status === 'manual' ? '상담원과 대화 중' : 'AI 아키텍트가 응대 중입니다'}
+                <div className={`w-2 h-2 rounded-full ${
+                  activeChat?.status === 'request_admin' ? 'bg-amber-400 animate-pulse' : 
+                  activeChat?.status === 'manual' ? 'bg-blue-400' : 
+                  activeChat?.status === 'closed' ? 'bg-slate-400' :
+                  'bg-emerald-400'
+                }`} />
+                {activeChat?.status === 'request_admin' ? '상담원 연결 대기 중' : 
+                 activeChat?.status === 'manual' ? '상담원과 대화 중' : 
+                 activeChat?.status === 'closed' ? '상담이 종료되었습니다' :
+                 'AI 아키텍트가 응대 중입니다'}
               </div>
             </div>
 
@@ -235,12 +275,16 @@ export default function FloatingSupportChat({ user }: FloatingSupportChatProps) 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="메시지를 입력하세요..."
-                  className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-500 transition-all text-sm"
+                  placeholder={activeChat?.status === 'closed' ? "상담이 종료되었습니다." : "메시지를 입력하세요..."}
+                  readOnly={activeChat?.status === 'closed'}
+                  className={cn(
+                    "w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-indigo-500 transition-all text-sm",
+                    activeChat?.status === 'closed' && "opacity-50 cursor-not-allowed"
+                  )}
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
+                  disabled={!input.trim() || isLoading || activeChat?.status === 'closed'}
                   className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center disabled:opacity-50 transition-all"
                 >
                   <Send className="w-4 h-4" />

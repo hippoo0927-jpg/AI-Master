@@ -566,28 +566,48 @@ function CSCenterTab() {
   const [chats, setChats] = useState<SupportChat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [reply, setReply] = useState('');
+  const [showClosed, setShowClosed] = useState(false);
   const { playAdminSound } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isFirstLoad = useRef(true);
+  const lastPlayedId = useRef<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'support_chats'), orderBy('lastMessageAt', 'desc'));
+    const chatsRef = collection(db, 'support_chats');
+    const q = showClosed 
+      ? query(chatsRef, where('status', '==', 'closed'), orderBy('lastMessageAt', 'desc'))
+      : query(chatsRef, where('status', 'in', ['ai', 'manual', 'request_admin']), orderBy('lastMessageAt', 'desc'));
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const newChats = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as SupportChat[];
       
-      // Play sound if any chat has unreadByAdmin and it's a new message or status change
-      const hasNewUnread = newChats.some(c => {
-        const oldChat = chats.find(oc => oc.id === c.id);
-        return c.unreadByAdmin && (!oldChat || c.messages.length > oldChat.messages.length || c.status === 'request_admin');
-      });
-
-      if (hasNewUnread) {
-        playAdminSound();
+      if (!isFirstLoad.current && !showClosed) {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'modified' || change.type === 'added') {
+            const chat = { id: change.doc.id, ...change.doc.data() } as SupportChat;
+            const lastMsg = chat.messages[chat.messages.length - 1];
+            
+            // Play sound only if unreadByAdmin is true AND it's a new message from user
+            if (chat.unreadByAdmin && lastMsg && lastMsg.role === 'user') {
+              const msgId = `${chat.id}_${lastMsg.timestamp?.toMillis() || Date.now()}`;
+              if (msgId !== lastPlayedId.current) {
+                playAdminSound();
+                lastPlayedId.current = msgId;
+              }
+            }
+          }
+        });
       }
 
       setChats(newChats);
+      isFirstLoad.current = false;
     });
-    return () => unsubscribe();
-  }, [chats, playAdminSound]);
+    return () => {
+      unsubscribe();
+      isFirstLoad.current = true;
+      lastPlayedId.current = null;
+    };
+  }, [showClosed, playAdminSound]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -595,6 +615,7 @@ function CSCenterTab() {
     }
   }, [selectedChatId, chats]);
 
+  const filteredChats = chats; // Already filtered by query
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
   const sendReply = async () => {
@@ -623,17 +644,32 @@ function CSCenterTab() {
     await updateDoc(doc(db, 'support_chats', id), { status });
   };
 
+  const completeChat = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await updateDoc(doc(db, 'support_chats', id), { 
+      status: 'closed',
+      unreadByAdmin: false
+    });
+    if (selectedChatId === id) setSelectedChatId(null);
+  };
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="h-[calc(100vh-160px)] flex gap-8">
       {/* Chat List */}
       <div className="w-96 bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
           <h3 className="font-bold text-slate-900 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-indigo-600" /> 활성 상담 목록
+            <MessageSquare className="w-5 h-5 text-indigo-600" /> {showClosed ? '종료된 상담' : '활성 상담 목록'}
           </h3>
+          <button 
+            onClick={() => setShowClosed(!showClosed)}
+            className="text-[10px] font-bold text-indigo-600 hover:underline"
+          >
+            {showClosed ? '활성 보기' : '종료 보기'}
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          {chats.map(chat => (
+          {filteredChats.map(chat => (
             <button
               key={chat.id}
               onClick={() => {
@@ -659,19 +695,34 @@ function CSCenterTab() {
               <div className="text-sm font-medium text-slate-700 line-clamp-1 mb-2">
                 {chat.messages[chat.messages.length - 1]?.content}
               </div>
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider",
-                  chat.status === 'ai' ? "bg-emerald-100 text-emerald-600" :
-                  chat.status === 'request_admin' ? "bg-amber-100 text-amber-600" :
-                  chat.status === 'manual' ? "bg-blue-100 text-blue-600" :
-                  "bg-slate-100 text-slate-600"
-                )}>
-                  {chat.status}
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider",
+                    chat.status === 'ai' ? "bg-emerald-100 text-emerald-600" :
+                    chat.status === 'request_admin' ? "bg-amber-100 text-amber-600" :
+                    chat.status === 'manual' ? "bg-blue-100 text-blue-600" :
+                    "bg-slate-100 text-slate-600"
+                  )}>
+                    {chat.status === 'closed' ? '상담 종료' : chat.status}
+                  </span>
+                </div>
+                {!showClosed && (
+                  <button 
+                    onClick={(e) => completeChat(e, chat.id)}
+                    className="text-[10px] font-bold text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity hover:underline"
+                  >
+                    상담 완료
+                  </button>
+                )}
               </div>
             </button>
           ))}
+          {filteredChats.length === 0 && (
+            <div className="text-center py-10 text-slate-300 text-sm">
+              {showClosed ? '종료된 상담이 없습니다.' : '활성 상담이 없습니다.'}
+            </div>
+          )}
         </div>
       </div>
 
