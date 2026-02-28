@@ -33,7 +33,7 @@ export interface Notice {
   targetUid?: string; // If empty, global
   isPopup: boolean;
   createdAt: Timestamp;
-  active: boolean;
+  isActive: boolean;
 }
 
 export interface Expert {

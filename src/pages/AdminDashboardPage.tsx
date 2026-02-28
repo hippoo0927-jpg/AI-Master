@@ -310,7 +310,7 @@ function CouponNoticeTab() {
     await addDoc(collection(db, 'notices'), {
       ...newNotice,
       createdAt: serverTimestamp(),
-      active: true
+      isActive: true
     });
     setNewNotice({ title: '', content: '', isPopup: false, targetUid: '' });
   };
@@ -388,9 +388,25 @@ function CouponNoticeTab() {
             <div key={n.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center">
               <div>
                 <div className="font-bold text-slate-900">{n.title}</div>
-                <div className="text-xs text-slate-400">{n.isPopup ? '팝업' : '일반'} • {dayjs(n.createdAt?.toDate()).format('MM/DD')}</div>
+                <div className="text-xs text-slate-400">
+                  {n.isPopup ? '팝업' : '일반'} • {n.isActive ? '활성' : '비활성'} • {dayjs(n.createdAt?.toDate()).format('MM/DD')}
+                </div>
               </div>
-              <button onClick={() => deleteDoc(doc(db, 'notices', n.id))} className="p-2 text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => updateDoc(doc(db, 'notices', n.id), { isActive: !n.isActive })}
+                  className={cn(
+                    "p-2 rounded-lg transition-colors",
+                    n.isActive ? "text-emerald-500 hover:bg-emerald-50" : "text-slate-300 hover:bg-slate-50"
+                  )}
+                  title={n.isActive ? "비활성화" : "활성화"}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => deleteDoc(doc(db, 'notices', n.id))} className="p-2 text-slate-300 hover:text-rose-500">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

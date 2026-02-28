@@ -53,6 +53,8 @@ import {
   ChatHistoryItem,
   useCoupon
 } from './services/chatService';
+import { Notice } from './types';
+import NoticeCarousel from './components/NoticeCarousel';
 
 import { 
   HashRouter as Router, 
@@ -68,9 +70,10 @@ import FloatingSupportChat from './components/FloatingSupportChat';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { onAuthStateChanged, signOut, User as FirebaseUser, signInWithPopup } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
 import { cn } from './lib/utils';
+import dayjs from 'dayjs';
 
 type Category = {
   id: string;
@@ -200,6 +203,64 @@ export default function App() {
   const [userRole, setUserRole] = useState<string>('user');
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [showNoticePopup, setShowNoticePopup] = useState(false);
+
+  useEffect(() => {
+    const noticesRef = collection(db, 'notices');
+    const q = query(
+      noticesRef, 
+      where('isActive', '==', true), 
+      where('isPopup', '==', true),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allNotices = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Notice[];
+
+      // Filter by localStorage "Don't show today"
+      const hiddenNoticesStr = localStorage.getItem('hidden_notices');
+      const hiddenNotices = hiddenNoticesStr ? JSON.parse(hiddenNoticesStr) : {};
+      const today = dayjs().format('YYYY-MM-DD');
+
+      const filteredNotices = allNotices.filter(notice => {
+        // If hidden today, skip
+        if (hiddenNotices[notice.id] === today) return false;
+        return true;
+      });
+
+      setNotices(filteredNotices);
+      
+      const isClosedInSession = sessionStorage.getItem('notice_popup_closed');
+      if (filteredNotices.length > 0 && !isClosedInSession) {
+        setShowNoticePopup(true);
+      } else {
+        setShowNoticePopup(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleCloseNoticePopup = () => {
+    setShowNoticePopup(false);
+    sessionStorage.setItem('notice_popup_closed', 'true');
+  };
+
+  const handleHideNoticeToday = (id: string) => {
+    const hiddenNoticesStr = localStorage.getItem('hidden_notices');
+    const hiddenNotices = hiddenNoticesStr ? JSON.parse(hiddenNoticesStr) : {};
+    const today = dayjs().format('YYYY-MM-DD');
+    
+    hiddenNotices[id] = today;
+    localStorage.setItem('hidden_notices', JSON.stringify(hiddenNotices));
+    
+    // Immediately remove from current state
+    setNotices(prev => prev.filter(n => n.id !== id));
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -241,6 +302,15 @@ export default function App() {
             onUpdate={() => setRefreshTrigger(prev => prev + 1)}
           />
         )}
+        <AnimatePresence>
+          {showNoticePopup && notices.length > 0 && (
+            <NoticeCarousel 
+              notices={notices} 
+              onClose={handleCloseNoticePopup} 
+              onHideToday={handleHideNoticeToday}
+            />
+          )}
+        </AnimatePresence>
       </Router>
     </ChatProvider>
   );

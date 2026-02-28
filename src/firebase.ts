@@ -21,3 +21,10 @@ export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export default app;
+
+/**
+ * Firestore Security Rules Guide:
+ * match /notices/{noticeId} { allow read: if true; }
+ * match /experts/{expertId} { allow read: if true; }
+ * match /users/{uid} { allow read, write: if request.auth != null && request.auth.uid == uid; }
+ */
