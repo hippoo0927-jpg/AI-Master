@@ -54,13 +54,16 @@ import {
 } from './services/chatService';
 
 import { 
-  BrowserRouter as Router, 
+  HashRouter as Router, 
   Routes, 
   Route, 
   useNavigate,
   Link
 } from 'react-router-dom';
 import ExpertChat from './pages/ExpertChat';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import ExpertsPage from './pages/ExpertsPage';
+import FloatingSupportChat from './components/FloatingSupportChat';
 
 // --- Firebase SDK 로드 및 초기화 ---
 import { onAuthStateChanged, signOut, User as FirebaseUser, signInWithPopup } from 'firebase/auth';
@@ -93,14 +96,46 @@ const PLATFORMS = [
   { id: 'perplexity', name: 'Perplexity', icon: Search },
 ];
 
+import { ChatProvider } from './contexts/ChatContext';
+
 export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userRole, setUserRole] = useState<string>('user');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          setUserRole(userDoc.data().role || 'user');
+        }
+      } else {
+        setUserRole('user');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/expert-chat" element={<ExpertChat />} />
-      </Routes>
-    </Router>
+    <ChatProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/expert-chat" element={<ExpertChat />} />
+          <Route path="/experts" element={<ExpertsPage />} />
+          <Route 
+            path="/admin" 
+            element={
+              (user?.email === 'hippoo0927@gmail.com' || userRole === 'admin') 
+                ? <AdminDashboardPage /> 
+                : <Home />
+            } 
+          />
+        </Routes>
+        {user && <FloatingSupportChat user={user} />}
+      </Router>
+    </ChatProvider>
   );
 }
 
@@ -460,10 +495,30 @@ function Home() {
                   </Link>
                 </div>
 
-                {/* Admin Dashboard - Only for hippoo0927@gmail.com */}
-            {user?.email === 'hippoo0927@gmail.com' && (
-              <div className="mb-16">
-                <AdminDashboard />
+                {/* Admin Dashboard Link - Only for admins */}
+            {(user?.email === 'hippoo0927@gmail.com' || userGrade === 'admin') && (
+              <div className="mb-8">
+                <Link 
+                  to="/admin"
+                  className="flex items-center justify-between p-6 bg-indigo-900 rounded-3xl border border-indigo-800 hover:border-indigo-500 transition-all group overflow-hidden relative"
+                >
+                  <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <ShieldCheck className="w-32 h-32 text-white" />
+                  </div>
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20">
+                      <ShieldCheck className="text-white w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-bold text-lg">Admin Dashboard</h3>
+                      <p className="text-indigo-300 text-sm">사용자, 쿠폰, 전문가 및 CS 센터를 관리하세요.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-white font-bold text-sm relative z-10">
+                    관리자 도구 열기
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </Link>
               </div>
             )}
 
