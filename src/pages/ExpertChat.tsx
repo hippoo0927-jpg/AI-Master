@@ -41,9 +41,11 @@ import { generateExpertChatStream, generateChatTitle } from '../services/geminiS
 import { 
   LoginRequiredModal, 
   PremiumRequiredModal, 
-  ApiKeyRequiredModal 
+  ApiKeyRequiredModal,
+  CreditsExhaustedModal
 } from '../components/AccessModals';
 import dayjs from 'dayjs';
+import { useChat } from '../contexts/ChatContext';
 
 interface Message {
   role: 'user' | 'model';
@@ -68,6 +70,7 @@ const ExpertChat: React.FC = () => {
   // User State
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userGrade, setUserGrade] = useState<string>('free');
+  const [freeCredits, setFreeCredits] = useState<number>(0);
   const [customApiKey, setCustomApiKey] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -80,6 +83,8 @@ const ExpertChat: React.FC = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const { playUserSound } = useChat();
 
   useEffect(() => {
     let unsubHistory: (() => void) | null = null;
@@ -95,12 +100,24 @@ const ExpertChat: React.FC = () => {
       
       if (currentUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userDoc = await getDoc(userRef);
           if (userDoc.exists()) {
             const data = userDoc.data();
             setUserGrade(data.grade || 'free');
+            setFreeCredits(data.free_credits || 0);
             setCustomApiKey(data.customApiKey || null);
           }
+
+          // Real-time user data for credits
+          const unsubUser = onSnapshot(userRef, (doc) => {
+            if (doc.exists()) {
+              const data = doc.data();
+              setUserGrade(data.grade || 'free');
+              setFreeCredits(data.free_credits || 0);
+              setCustomApiKey(data.customApiKey || null);
+            }
+          });
 
           // Fetch History
           const isAdmin = currentUser.email === 'hippoo0927@gmail.com';
@@ -149,18 +166,17 @@ const ExpertChat: React.FC = () => {
 
     // --- Access Control Logic ---
     const isAdmin = user?.email === 'hippoo0927@gmail.com';
+    const hasCredits = freeCredits > 0;
     
     if (!isAdmin) {
       if (!user) {
         setShowLoginModal(true);
         return;
       }
-      if (userGrade !== 'premium') {
-        setShowPremiumModal(true);
-        return;
-      }
-      if (!customApiKey) {
-        setShowKeyModal(true);
+      
+      // Allow access if user has free credits, even if not premium and no API key
+      if (userGrade !== 'premium' && !customApiKey && !hasCredits) {
+        setShowCreditsModal(true);
         return;
       }
     }
@@ -173,6 +189,12 @@ const ExpertChat: React.FC = () => {
     setStreamingText('');
 
     try {
+      // Decrement credits if using free credits
+      if (!isAdmin && userGrade !== 'premium' && !customApiKey && hasCredits) {
+        await updateDoc(doc(db, 'users', user!.uid), {
+          free_credits: freeCredits - 1
+        });
+      }
       const historyPayload = newMessages.map(msg => ({
         role: msg.role,
         parts: [{ text: msg.content }]
@@ -189,6 +211,7 @@ const ExpertChat: React.FC = () => {
       const finalMessages: Message[] = [...newMessages, { role: 'model', content: fullResponse }];
       setMessages(finalMessages);
       setStreamingText('');
+      playUserSound();
 
       // --- Save to Firestore ---
       if (user) {
@@ -354,6 +377,11 @@ const ExpertChat: React.FC = () => {
           onClose={() => setShowKeyModal(false)} 
           onSettings={() => navigate('/')} 
         />
+        <CreditsExhaustedModal 
+          isOpen={showCreditsModal} 
+          onClose={() => setShowCreditsModal(false)} 
+          onAction={() => navigate('/')} 
+        />
 
         {/* Header */}
         <header className="h-20 border-b border-white/10 bg-[#0A0A0A]/80 backdrop-blur-md sticky top-0 z-50 px-6 flex items-center justify-between shrink-0">
@@ -378,7 +406,11 @@ const ExpertChat: React.FC = () => {
                 <h1 className="text-xl font-bold tracking-tight">Auto-Pilot <span className="text-[#D4AF37]">Expert Mode</span></h1>
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                  <span className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Gemini 2.5 Flash Connected</span>
+                  <span className="text-[10px] text-white/40 uppercase font-bold tracking-widest">
+                    {userGrade !== 'premium' && !customApiKey && freeCredits > 0 
+                      ? `무료 체험 크레딧 사용 중 (잔여: ${freeCredits}회)` 
+                      : 'Gemini 2.5 Flash Connected'}
+                  </span>
                 </div>
               </div>
             </div>

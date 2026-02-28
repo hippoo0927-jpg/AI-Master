@@ -116,3 +116,17 @@ export const ApiKeyRequiredModal: React.FC<{ isOpen: boolean; onClose: () => voi
     iconColor="text-emerald-400"
   />
 );
+
+export const CreditsExhaustedModal: React.FC<{ isOpen: boolean; onClose: () => void; onAction: () => void }> = ({ isOpen, onClose, onAction }) => (
+  <BaseModal
+    isOpen={isOpen}
+    onClose={onClose}
+    onAction={onAction}
+    title="무료 체험 크레딧 소진"
+    description="모든 무료 체험 크레딧을 소진했습니다. 계속해서 전문가 상담을 이용하시려면 개인 API KEY를 등록하거나 프리미엄 멤버십으로 업그레이드해주세요."
+    actionText="설정 및 업그레이드"
+    icon={AlertCircle}
+    iconBg="bg-rose-500/20"
+    iconColor="text-rose-400"
+  />
+);

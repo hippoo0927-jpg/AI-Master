@@ -113,7 +113,7 @@ function CouponModal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean, o
     setSuccess(null);
     try {
       const benefit = await useCoupon(userId, code);
-      setSuccess(`쿠폰이 등록되었습니다! 무료 상담 혜택(${benefit}회)을 확인하세요.`);
+      setSuccess(`쿠폰이 등록되었습니다! Expert Mode 전용 무료 상담 혜택(${benefit}회)이 지급되었습니다.`);
       onUpdate();
       setTimeout(() => {
         onClose();
