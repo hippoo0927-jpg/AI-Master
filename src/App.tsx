@@ -207,44 +207,30 @@ export default function App() {
   const [showNoticePopup, setShowNoticePopup] = useState(false);
 
   useEffect(() => {
-  const noticesRef = collection(db, 'notices');
-  const q = query(
-    noticesRef, 
-    where('isActive', '==', true), 
-    where('isPopup', '==', true),
-    orderBy('createdAt', 'desc')
-  );
+    const noticesRef = collection(db, 'notices');
+    const q = query(
+      noticesRef, 
+      where('isActive', '==', true), 
+      where('isPopup', '==', true),
+      orderBy('createdAt', 'desc')
+    );
 
-  const unsubscribe = onSnapshot(q, (snapshot) => {
-    const allNotices = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Notice[];
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allNotices = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Notice[];
 
-    // localStorage에서 '오늘 하루 보지 않기' 기록 가져오기
-    const hiddenNoticesStr = localStorage.getItem('hidden_notices');
-    const hiddenNotices = hiddenNoticesStr ? JSON.parse(hiddenNoticesStr) : {};
-    const now = Date.now();
+      // Filter by localStorage "Don't show today"
+      const hiddenNoticesStr = localStorage.getItem('hidden_notices');
+      const hiddenNotices = hiddenNoticesStr ? JSON.parse(hiddenNoticesStr) : {};
+      const today = dayjs().format('YYYY-MM-DD');
 
-    const filteredNotices = allNotices.filter(notice => {
-      // 해당 공지의 숨김 만료 시간이 현재보다 미래라면 숨김 처리
-      const expiryTime = hiddenNotices[notice.id];
-      if (expiryTime && now < expiryTime) return false;
-      return true;
-    });
-
-    setNotices(filteredNotices);
-    
-    // ✅ 세션 체크 없이 필터링된 공지가 있으면 무조건 팝업 활성화
-    if (filteredNotices.length > 0) {
-      setShowNoticePopup(true);
-    } else {
-      setShowNoticePopup(false);
-    }
-  });
-
-  return () => unsubscribe();
-}, []);
+      const filteredNotices = allNotices.filter(notice => {
+        // If hidden today, skip
+        if (hiddenNotices[notice.id] === today) return false;
+        return true;
+      });
 
       setNotices(filteredNotices);
       
