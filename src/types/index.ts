@@ -9,11 +9,11 @@ export interface UserProfile {
   expiryDate: Timestamp | null;
   customApiKey: string | null;
   selectedModel: string;
-  usageCount: number;
+  daily_count: number;
   free_credits: number;
-  coupon_used: boolean;
+  used_coupons: string[];
   createdAt: Timestamp;
-  lastUsageReset: Timestamp | null;
+  last_reset_date: Timestamp | null;
   role?: 'admin' | 'user';
 }
 

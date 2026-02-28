@@ -261,7 +261,7 @@ function Home({ onUpdate, onOpenCoupon }: { onUpdate?: () => void, onOpenCoupon?
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userGrade, setUserGrade] = useState<string>('free'); // 기본 등급: free
   const [userExpiryDate, setUserExpiryDate] = useState<any>(null);
-  const [usageCount, setUsageCount] = useState<number>(0);
+  const [dailyCount, setDailyCount] = useState<number>(0);
   const [customApiKey, setCustomApiKey] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
   const [streamingText, setStreamingText] = useState<string>('');
@@ -295,7 +295,7 @@ function Home({ onUpdate, onOpenCoupon }: { onUpdate?: () => void, onOpenCoupon?
           setUserExpiryDate(data.expiryDate || null);
           setCustomApiKey(data.customApiKey || null);
           setSelectedModel(data.selectedModel || 'gemini-1.5-flash');
-          setUsageCount(data.usageCount || 0);
+          setDailyCount(data.daily_count || 0);
         } else {
           // 신규 유저인 경우 기본 등급으로 생성
           await setDoc(userDocRef, {
@@ -304,14 +304,16 @@ function Home({ onUpdate, onOpenCoupon }: { onUpdate?: () => void, onOpenCoupon?
             expiryDate: null,
             customApiKey: null,
             selectedModel: 'gemini-1.5-flash',
-            usageCount: 0,
-            createdAt: new Date()
+            daily_count: 0,
+            used_coupons: [],
+            createdAt: new Date(),
+            last_reset_date: new Date()
           });
           setUserGrade('free');
           setUserExpiryDate(null);
           setCustomApiKey(null);
           setSelectedModel('gemini-1.5-flash');
-          setUsageCount(0);
+          setDailyCount(0);
         }
 
         // 대화 기록 구독
@@ -324,7 +326,7 @@ function Home({ onUpdate, onOpenCoupon }: { onUpdate?: () => void, onOpenCoupon?
         setUserExpiryDate(null);
         setCustomApiKey(null);
         setSelectedModel('gemini-1.5-flash');
-        setUsageCount(0);
+        setDailyCount(0);
         setChatHistory([]);
       }
     });
@@ -441,7 +443,7 @@ function Home({ onUpdate, onOpenCoupon }: { onUpdate?: () => void, onOpenCoupon?
           if (user && !data.isClarificationNeeded) {
             await incrementUsage(user.uid);
             await saveChatHistory(user.uid, userInput, selectedCategory, data);
-            setUsageCount(prev => prev + 1);
+            setDailyCount(prev => prev + 1);
           }
         } catch (parseError) {
           console.error("JSON Parse Error:", parseError);
@@ -511,7 +513,7 @@ function Home({ onUpdate, onOpenCoupon }: { onUpdate?: () => void, onOpenCoupon?
               {user && (
                 <UsageWidget 
                   grade={userGrade} 
-                  usageCount={usageCount} 
+                  daily_count={dailyCount} 
                   expiryDate={userExpiryDate} 
                   hasCustomKey={!!customApiKey}
                 />

@@ -41,9 +41,10 @@ import { generateExpertChatStream, generateChatTitle } from '../services/geminiS
 import { 
   LoginRequiredModal, 
   PremiumRequiredModal, 
-  ApiKeyRequiredModal,
+  ApiKeyConfigModal,
   CreditsExhaustedModal
 } from '../components/AccessModals';
+import SubscriptionModal from '../components/SubscriptionModal';
 import dayjs from 'dayjs';
 import { useChat } from '../contexts/ChatContext';
 
@@ -84,6 +85,7 @@ const ExpertChat: React.FC = () => {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [showSubModal, setShowSubModal] = useState(false);
   const { playUserSound } = useChat();
 
   useEffect(() => {
@@ -176,7 +178,18 @@ const ExpertChat: React.FC = () => {
       
       // Allow access if user has free credits, even if not premium and no API key
       if (userGrade !== 'premium' && !customApiKey && !hasCredits) {
-        setShowCreditsModal(true);
+        // 크레딧 0일 때 대응
+        if (userGrade === 'free') {
+          setShowSubModal(true); // 일반 유저: 구독 유도
+        } else {
+          setShowKeyModal(true); // 프리미엄 유저: API KEY 설정 유도
+        }
+        return;
+      }
+
+      // 프리미엄 유저인데 API KEY가 없고 크레딧도 없으면 설정 유도
+      if (userGrade === 'premium' && !customApiKey && !hasCredits) {
+        setShowKeyModal(true);
         return;
       }
     }
@@ -189,8 +202,8 @@ const ExpertChat: React.FC = () => {
     setStreamingText('');
 
     try {
-      // Decrement credits if using free credits
-      if (!isAdmin && userGrade !== 'premium' && !customApiKey && hasCredits) {
+      // Decrement credits if using free credits (no custom API key)
+      if (!isAdmin && !customApiKey && hasCredits) {
         await updateDoc(doc(db, 'users', user!.uid), {
           free_credits: freeCredits - 1
         });
@@ -372,10 +385,15 @@ const ExpertChat: React.FC = () => {
           onClose={() => setShowPremiumModal(false)} 
           onUpgrade={() => navigate('/')} 
         />
-        <ApiKeyRequiredModal 
+        <ApiKeyConfigModal 
           isOpen={showKeyModal} 
           onClose={() => setShowKeyModal(false)} 
           onSettings={() => navigate('/')} 
+        />
+        <SubscriptionModal
+          isOpen={showSubModal}
+          onClose={() => setShowSubModal(false)}
+          userEmail={user?.email || ""}
         />
         <CreditsExhaustedModal 
           isOpen={showCreditsModal} 

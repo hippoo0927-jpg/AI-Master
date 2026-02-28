@@ -13,7 +13,8 @@ import {
   where,
   getDocs,
   Timestamp,
-  increment
+  increment,
+  arrayUnion
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import dayjs from 'dayjs';
@@ -61,7 +62,7 @@ export function subscribeToChatHistory(userId: string, callback: (history: ChatH
 }
 
 /**
- * 일일 사용량 및 크레딧 체크
+ * 일일 사용량 및 크레딧 체크 (일반 채팅용)
  */
 export async function checkUsage(userId: string, grade: string) {
   const userRef = doc(db, 'users', userId);
@@ -71,32 +72,29 @@ export async function checkUsage(userId: string, grade: string) {
 
   const data = userDoc.data() as UserProfile;
   
-  // 프리미엄은 제한 없음
+  // 프리미엄은 일반 채팅 제한 없음
   if (grade === 'premium') return true;
 
-  // 크레딧이 있으면 우선 사용 가능
-  if (data.free_credits && data.free_credits > 0) return true;
-
   const now = dayjs();
-  const lastReset = data.lastUsageReset ? dayjs(data.lastUsageReset.toDate()) : null;
+  const lastReset = data.last_reset_date ? dayjs(data.last_reset_date.toDate()) : null;
   
-  let currentCount = data.usageCount || 0;
+  let currentCount = data.daily_count || 0;
 
   // 날짜가 바뀌었으면 리셋
   if (!lastReset || !now.isSame(lastReset, 'day')) {
     await updateDoc(userRef, {
-      usageCount: 0,
-      lastUsageReset: serverTimestamp()
+      daily_count: 0,
+      last_reset_date: serverTimestamp()
     });
     return true;
   }
 
-  // 무료 사용자는 일일 5회 제한
+  // 무료 사용자는 일반 채팅 일일 5회 제한
   return currentCount < 5;
 }
 
 /**
- * 사용량 차감 또는 증가
+ * 일반 채팅 사용량 증가 (free_credits 차감 없음)
  */
 export async function incrementUsage(userId: string) {
   try {
@@ -106,19 +104,11 @@ export async function incrementUsage(userId: string) {
 
     const data = userDoc.data() as UserProfile;
     
-    // 크레딧이 있으면 크레딧 차감
-    if (data.free_credits && data.free_credits > 0) {
-      await updateDoc(userRef, {
-        free_credits: increment(-1)
-      });
-      return;
-    }
-
-    // 크레딧 없으면 일일 사용량 증가
-    const currentCount = data.usageCount || 0;
+    // 일반 채팅은 daily_count만 증가
+    const currentCount = data.daily_count || 0;
     await updateDoc(userRef, {
-      usageCount: currentCount + 1,
-      lastUsageReset: serverTimestamp()
+      daily_count: currentCount + 1,
+      last_reset_date: serverTimestamp()
     });
   } catch (error) {
     console.error("Error incrementing usage:", error);
@@ -135,7 +125,10 @@ export async function useCoupon(userId: string, code: string) {
     if (!userDoc.exists()) throw new Error("사용자를 찾을 수 없습니다.");
 
     const userData = userDoc.data() as UserProfile;
-    if (userData.coupon_used) throw new Error("이미 쿠폰을 사용한 계정입니다.");
+    const usedCoupons = userData.used_coupons || [];
+    if (usedCoupons.includes(code.trim())) {
+      throw new Error("이미 사용한 쿠폰 번호입니다.");
+    }
 
     // 쿠폰 조회
     const couponsRef = collection(db, 'coupons');
@@ -155,7 +148,7 @@ export async function useCoupon(userId: string, code: string) {
     // 혜택 지급
     await updateDoc(userRef, {
       free_credits: increment(couponData.benefit_credits || 0),
-      coupon_used: true
+      used_coupons: arrayUnion(code.trim())
     });
 
     // 쿠폰 사용 횟수 증가

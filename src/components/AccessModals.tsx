@@ -103,7 +103,7 @@ export const PremiumRequiredModal: React.FC<{ isOpen: boolean; onClose: () => vo
   />
 );
 
-export const ApiKeyRequiredModal: React.FC<{ isOpen: boolean; onClose: () => void; onSettings: () => void }> = ({ isOpen, onClose, onSettings }) => (
+export const ApiKeyConfigModal: React.FC<{ isOpen: boolean; onClose: () => void; onSettings: () => void }> = ({ isOpen, onClose, onSettings }) => (
   <BaseModal
     isOpen={isOpen}
     onClose={onClose}

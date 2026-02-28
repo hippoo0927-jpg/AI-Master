@@ -9,15 +9,15 @@ import dayjs from 'dayjs';
 
 interface UsageWidgetProps {
   grade: string;
-  usageCount: number;
+  daily_count: number;
   expiryDate?: Timestamp;
   hasCustomKey?: boolean;
 }
 
-export default function UsageWidget({ grade, usageCount, expiryDate, hasCustomKey }: UsageWidgetProps) {
+export default function UsageWidget({ grade, daily_count, expiryDate, hasCustomKey }: UsageWidgetProps) {
   const isPremium = grade === 'premium';
   const limit = 5;
-  const progress = Math.min((usageCount / limit) * 100, 100);
+  const progress = Math.min((daily_count / limit) * 100, 100);
 
   const getDDay = () => {
     if (!expiryDate) return null;
@@ -47,12 +47,12 @@ export default function UsageWidget({ grade, usageCount, expiryDate, hasCustomKe
           <div className="flex flex-col min-w-[80px]">
             <div className="flex justify-between items-end mb-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Daily Usage</span>
-              <span className="text-[10px] font-black text-indigo-600">{usageCount}/{limit}</span>
+              <span className="text-[10px] font-black text-indigo-600">{daily_count}/{limit}</span>
             </div>
             <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
               <div 
                 className={`h-full transition-all duration-500 rounded-full ${
-                  usageCount >= limit ? 'bg-rose-500' : 'bg-indigo-600'
+                  daily_count >= limit ? 'bg-rose-500' : 'bg-indigo-600'
                 }`}
                 style={{ width: `${progress}%` }}
               />
